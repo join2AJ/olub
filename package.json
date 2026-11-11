@@ -1,0 +1,27 @@
+{
+  "name": "olub",
+  "version": "0.1.0",
+  "description": "Olub — book the cab in front of you. ₹5 per trip, rest goes to the driver.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/join2AJ/olub.git"
+  },
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/join2AJ/olub/issues"
+  },
+  "homepage": "https://github.com/join2AJ/olub#readme",
+  "dependencies": {
+    "express": "^5.3.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  }
+}

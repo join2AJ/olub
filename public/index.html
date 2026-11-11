@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f7b4a">
+  <title>Olub — book the cab in front of you</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">O</span>Olub</div>
+    <div id="who" class="who"></div>
+  </header>
+  <main id="app"></main>
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- in-app voice call (numbers stay hidden) -->
+  <div id="call" class="call" hidden>
+    <div class="call-card">
+      <div class="call-avatar">📞</div>
+      <div id="call-name" class="call-name"></div>
+      <div id="call-state" class="muted"></div>
+      <div class="row center">
+        <button id="call-accept" class="btn ok" hidden>Answer</button>
+        <button id="call-end" class="btn danger">End</button>
+      </div>
+      <audio id="call-audio" autoplay></audio>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
