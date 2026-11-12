@@ -7,8 +7,10 @@ const C = require('./config');
 let key;
 if (/^[0-9a-f]{64}$/i.test(C.DATA_KEY)) {
   key = Buffer.from(C.DATA_KEY, 'hex');
+} else if (C.DATA_KEY.length >= 32) {
+  key = crypto.createHash('sha256').update(C.DATA_KEY).digest(); // any long random secret works
 } else {
-  if (process.env.NODE_ENV === 'production') throw new Error('Set OLUB_DATA_KEY (64 hex chars) in production');
+  if (process.env.NODE_ENV === 'production') throw new Error('Set OLUB_DATA_KEY (a random secret of 32+ characters) in production');
   key = crypto.createHash('sha256').update('olub-dev-only-key').digest();
 }
 

@@ -1,0 +1,20 @@
+# One-step hosting on Render (render.com): New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: olub
+    runtime: node
+    plan: free
+    branch: claude/olub-cab-booking-app-uojbbk
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: OLUB_TRUST_PROXY
+        value: "1"
+      - key: OLUB_DATA_KEY
+        generateValue: true
+      # Your own mobile number(s), comma separated. These accounts open the admin console.
+      - key: OLUB_ADMIN_PHONES
+        sync: false
