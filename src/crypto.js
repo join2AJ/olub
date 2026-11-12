@@ -1,6 +1,8 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const C = require('./config');
 
 // Key for encrypting sensitive documents (KYC, licence, RC) at rest.
@@ -9,8 +11,20 @@ if (/^[0-9a-f]{64}$/i.test(C.DATA_KEY)) {
   key = Buffer.from(C.DATA_KEY, 'hex');
 } else if (C.DATA_KEY.length >= 32) {
   key = crypto.createHash('sha256').update(C.DATA_KEY).digest(); // any long random secret works
+} else if (process.env.NODE_ENV === 'production') {
+  // No key configured: create one and keep it next to the database, so the server still starts.
+  // Setting OLUB_DATA_KEY yourself is safer (the key then lives apart from the data).
+  const file = path.join(path.dirname(process.env.OLUB_DB || path.join(__dirname, '..', 'data', 'olub-v2.db')), 'olub.key');
+  try {
+    key = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex');
+    if (key.length !== 32) throw new Error('bad key file');
+  } catch {
+    key = crypto.randomBytes(32);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, key.toString('hex'), { mode: 0o600 });
+  }
+  console.warn(`[olub] OLUB_DATA_KEY is not set. Using the key stored in ${file}.`);
 } else {
-  if (process.env.NODE_ENV === 'production') throw new Error('Set OLUB_DATA_KEY (a random secret of 32+ characters) in production');
   key = crypto.createHash('sha256').update('olub-dev-only-key').digest();
 }
 
