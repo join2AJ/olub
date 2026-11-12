@@ -19,6 +19,12 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import android.view.View;
+import android.widget.LinearLayout;
+
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import java.util.ArrayList;
@@ -48,7 +54,24 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         web = new WebView(this);
-        setContentView(web);
+        // Android 15 draws apps behind the status and navigation bars. Keep the screens clear of both
+        // (and of the keyboard): green strip under the status bar, white strip under the bottom bar.
+        final LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(0xFF0F7B4A);
+        final View bottomStrip = new View(this);
+        bottomStrip.setBackgroundColor(0xFFFFFFFF);
+        root.addView(web, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(bottomStrip, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0));
+        setContentView(root);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, bars.top, bars.right, 0);
+            bottomStrip.getLayoutParams().height = Math.max(bars.bottom, ime.bottom);
+            bottomStrip.requestLayout();
+            return WindowInsetsCompat.CONSUMED;
+        });
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);

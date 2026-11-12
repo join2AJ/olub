@@ -153,7 +153,7 @@ module.exports = {
   // ---------- security ----------
   SESSION_TTL_MS: 30 * DAY,
   TRIP_OTP_MAX_ATTEMPTS: 5,
-  LOGIN_OTP_TTL_MS: 5 * 60 * 1000,
+  LOGIN_OTP_TTL_MS: 10 * 60 * 1000,
   AUTH_RATE_LIMIT: { windowMs: 10 * 60 * 1000, max: 30 },
   DEV_OTP: process.env.OLUB_DEV_OTP !== '0',
   ADMIN_PHONES: (process.env.OLUB_ADMIN_PHONES || '9999999999').split(',').map((s) => s.trim()),

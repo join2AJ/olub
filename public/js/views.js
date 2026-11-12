@@ -161,7 +161,7 @@ function renderAuth(app) {
       <div id="otp-step" hidden>
         <label class="f">Enter the 6-digit code we sent</label>
         <input id="code" inputmode="numeric" maxlength="6" class="otp-in" autocomplete="one-time-code">
-        <p id="devcode" class="muted small"></p>
+        <div class="between"><p id="devcode" class="muted small" style="margin:6px 0"></p><button id="resend" type="button" class="btn small ghost">Send a new code</button></div>
         <div id="new-user" hidden>
           <label class="f">Your name</label><input id="name" placeholder="Full name" autocomplete="name">
           <label class="f">I want to</label>
@@ -177,15 +177,28 @@ function renderAuth(app) {
   let step = 'phone', roleSel = 'rider';
   $$('#rolepick button').forEach((b) => { b.onclick = () => { roleSel = b.dataset.r; $$('#rolepick button').forEach((x) => x.classList.toggle('on', x === b)); }; });
   $('#see-terms').onclick = (e) => { e.preventDefault(); legalSheet(S.legal.required[roleSel]); };
+  const sendCode = async () => {
+    const r = await api('POST', '/api/auth/request-otp', { phone: $('#phone').value });
+    $('#otp-step').hidden = false; $('#new-user').hidden = !r.isNewUser;
+    $('#code').value = '';
+    $('#devcode').textContent = r.devCode ? `Test mode code: ${r.devCode}` : 'Code sent.';
+  };
+  $('#resend').onclick = run(async () => { await sendCode(); toast('New code sent'); });
   $('#go').onclick = run(async () => {
     const phone = $('#phone').value;
     if (step === 'phone') {
-      const r = await api('POST', '/api/auth/request-otp', { phone });
-      $('#otp-step').hidden = false; $('#new-user').hidden = !r.isNewUser;
-      if (r.devCode) $('#devcode').textContent = `Test mode code: ${r.devCode}`;
+      await sendCode();
       $('#go').firstChild.textContent = 'Continue'; step = 'otp'; $('#code').focus();
     } else {
-      const r = await api('POST', '/api/auth/verify-otp', { phone, code: $('#code').value, name: $('#name').value, role: roleSel, acceptTerms: $('#terms').checked });
+      let r;
+      try {
+        r = await api('POST', '/api/auth/verify-otp', { phone, code: $('#code').value, name: $('#name').value, role: roleSel, acceptTerms: $('#terms').checked });
+      } catch (e) {
+        if (!/expired/i.test(e.message)) throw e;
+        // The code is no longer valid (too old, or the server restarted): get a fresh one straight away.
+        await sendCode();
+        throw new Error('That code had expired. We sent a new one — please enter it.');
+      }
       S.token = r.token; store('olub.token', r.token);
       S.me = r.user; S.tab = 'home'; connect(); await refreshTrip(); render();
     }
