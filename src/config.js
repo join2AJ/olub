@@ -175,6 +175,9 @@ module.exports = {
   LOGIN_OTP_TTL_MS: 10 * 60 * 1000,
   AUTH_RATE_LIMIT: { windowMs: 10 * 60 * 1000, max: 30 },
   DEV_OTP: process.env.OLUB_DEV_OTP !== '0',
+  // One-tap "Try as passenger / driver / admin" buttons on the sign-in screen. Test mode only;
+  // remove them with OLUB_DEMO_LOGIN=0 (they are always off once OLUB_DEV_OTP=0).
+  DEMO_LOGIN: process.env.OLUB_DEV_OTP !== '0' && process.env.OLUB_DEMO_LOGIN !== '0',
   ADMIN_PHONES: (process.env.OLUB_ADMIN_PHONES || '9999999999').split(',').map((s) => s.trim()),
   // 32-byte key (hex) for encrypting KYC documents at rest.
   DATA_KEY: process.env.OLUB_DATA_KEY || '',

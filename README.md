@@ -40,6 +40,7 @@ Open `http://localhost:3000` in a browser to use the same app without installing
 | Setting | What it does |
 |---|---|
 | `OLUB_ADMIN_PHONES` | Mobile numbers that are admins (default `9999999999`) |
+| `OLUB_DEMO_LOGIN=0` | Remove the one-tap Passenger / Driver / Admin demo buttons from the sign-in screen (they are also off whenever `OLUB_DEV_OTP=0`) |
 | `OLUB_DEMO=1` | Load the demo drivers, customers and trips at start-up (useful on hosts that wipe data on restart) |
 | `GOOGLE_MAPS_API_KEY` | Live traffic and Google address search. Without it the app uses free OpenStreetMap road routes and search, and estimates traffic by time of day |
 | `OLUB_OSRM_URL`, `OLUB_PHOTON_URL` | Your own OpenStreetMap routing / search servers (default: the free public ones, which have no uptime promise). `OLUB_OSM=0` turns them off |
@@ -55,6 +56,8 @@ Open `http://localhost:3000` in a browser to use the same app without installing
 To try it: open two browser windows (or two phones). Sign up as a driver in one, as a customer in the other. Login codes appear on screen in test mode. Log in as `9999999999` for the admin console.
 
 ## Demo data
+
+The quickest way in: the sign-in screen has **Try the demo** with three buttons — **Passenger**, **Driver** and **Admin**. One tap loads the demo data and signs you in, no code needed. The Driver button signs in as whichever driver has a request waiting, so you can book as Passenger on one phone and accept as Driver on another.
 
 Admin → **Demo data** → **Load demo data** adds 9 drivers, 4 customers and 15 trips around Lucknow: completed, cancelled by either side, declined, one waiting for a driver and one in progress, with ratings, wallet history, invoices, a toll and a guest booking. Log out and sign in with any of these numbers (the code shows on screen):
 

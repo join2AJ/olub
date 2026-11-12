@@ -315,3 +315,77 @@ table.rates { width: 100%; border-collapse: collapse; font-size: 14px; } table.r
 .btn.dark { background: #16181c; box-shadow: 0 8px 20px rgba(0,0,0,.28); font-size: 17px; padding: 17px 18px; border-radius: 16px; }
 .searching { position: relative; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 10px 0; } .searching::after { content: ""; position: absolute; inset: 0; width: 35%; background: var(--brand); border-radius: 2px; animation: sweep 1.4s ease-in-out infinite; }
 @keyframes sweep { from { transform: translateX(-110%); } to { transform: translateX(320%); } }
+
+/* =====================================================================
+   v0.7 — refined look: deep green, soft gold, calmer spacing, aligned rows
+   ===================================================================== */
+:root { --brand: #0c6b41; --brand-2: #063d26; --brand-3: #129a5c; --gold: #c7a14a; --gold-2: #e9d08a; --accent: #f0b429; --accent-ink: #2e2100;
+  --bg: #f4f6f4; --line: #e3e9e5; --soft: #e8f3ed; --r: 20px;
+  --shadow: 0 1px 1px rgba(12,32,24,.04), 0 10px 30px -12px rgba(12,32,24,.18); }
+@media (prefers-color-scheme: dark) { :root { --bg: #0b100e; --card: #141b18; --line: #233029; --soft: #12291f; } }
+body { font-feature-settings: "tnum" 0, "ss01"; letter-spacing: -.005em; }
+h1 { font-weight: 800; letter-spacing: -.028em; } h2 { font-size: 18px; font-weight: 750; letter-spacing: -.015em; }
+h3 { letter-spacing: .09em; font-size: 11.5px; }
+.top { background: linear-gradient(120deg, #0c6b41 0%, #063d26 100%); padding: 12px 16px; box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 6px 18px -10px rgba(6,61,38,.7); }
+.top::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1.5px; background: linear-gradient(90deg, transparent, var(--gold), transparent); opacity: .55; }
+.brand { font-size: 21px; } .logo { box-shadow: 0 0 0 2px rgba(199,161,74,.55); }
+.idchip { background: rgba(255,255,255,.1); border: 1px solid rgba(233,208,138,.45); color: var(--gold-2); }
+main { padding: 16px 16px calc(100px + var(--safe-b)); }
+.map.hero-map { margin: -16px -16px 0; }
+.card { padding: 18px; margin-bottom: 14px; border: 1px solid rgba(12,32,24,.04); }
+.card.soft, .card.warn, .card.alert { border: 0; }
+.hero { background: linear-gradient(135deg, #0c6b41, #063d26); }
+.hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 40%, rgba(233,208,138,.14) 50%, transparent 60%); pointer-events: none; }
+.btn { border-radius: 15px; background: linear-gradient(180deg, #11804e, #0c6b41); box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 10px 22px -10px rgba(12,107,65,.75); letter-spacing: -.005em; }
+.btn.ghost { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line); } .btn.danger { background: var(--danger); box-shadow: none; }
+.btn.accent { background: linear-gradient(180deg, #f6c343, #eaa91a); color: var(--accent-ink); box-shadow: 0 1px 0 rgba(255,255,255,.45) inset, 0 10px 22px -10px rgba(234,169,26,.8); }
+.btn.dark { background: linear-gradient(180deg, #23272b, #101214); box-shadow: 0 1px 0 rgba(255,255,255,.1) inset, 0 12px 26px -12px rgba(0,0,0,.6); }
+.btn.small { box-shadow: none; }
+input, select, textarea { border-radius: 15px; border-color: var(--line); }
+.chip { font-weight: 650; } .chip.gold { background: #fbf3dc; color: #7a5a10; border: 1px solid #ecd9a0; }
+.nav { border-top: 0; box-shadow: 0 -10px 30px -18px rgba(12,32,24,.35); padding-top: 10px; }
+.nav button { gap: 4px; } .nav button.on { color: var(--brand); } .nav button.on .pill { background: var(--soft); box-shadow: inset 0 0 0 1px rgba(12,107,65,.12); }
+.nav button.on::after { content: ""; width: 16px; height: 2.5px; border-radius: 2px; background: var(--gold); position: absolute; bottom: -2px; left: calc(50% - 8px); }
+.sheet-card { border-radius: 26px 26px var(--r) var(--r); }
+.route button { padding: 13px 0; } .route span.t { font-weight: 650; }
+.digipin { background: var(--soft); border: 1px solid rgba(12,107,65,.12); }
+.optchips button { padding: 9px 14px; }
+/* option rows: icon | text | price above button, all on one grid so every row lines up */
+.opt { display: grid; grid-template-columns: 46px minmax(0, 1fr) 104px; column-gap: 12px; align-items: center; padding: 14px 0; }
+.opt .vi { width: 46px; height: 46px; border-radius: 15px; }
+.opt .pr { display: grid; justify-items: stretch; gap: 6px; text-align: right; } .opt b.p { font-size: 18px; letter-spacing: -.02em; }
+.opt .req { width: 100%; padding: 9px 0; }
+.opt .away { margin-top: 2px; }
+.bookany { align-items: center; padding: 16px; border: 1.5px solid var(--brand); background: linear-gradient(135deg, var(--soft), var(--card) 70%); box-shadow: 0 0 0 4px rgba(12,107,65,.06); }
+.bookany .grow { display: grid; gap: 2px; min-width: 0; } .bookany .range { font-size: 20px; letter-spacing: -.02em; white-space: nowrap; }
+.fastest { color: #7a5a10; border-color: #ecd9a0; background: #fbf3dc; vertical-align: 0; }
+.grid2 { grid-auto-rows: 1fr; } .stat { display: grid; align-content: start; gap: 2px; border: 1px solid rgba(12,32,24,.04); }
+.stat .v { font-size: 23px; } .stat .l { line-height: 1.35; }
+.dash { background: linear-gradient(135deg, #0d1f17, #0c3a26 60%, #0c6b41); border: 1px solid rgba(233,208,138,.18); }
+.dash .bignum { background: linear-gradient(180deg, #fff, var(--gold-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.dash .chip svg.i, .chip svg.i { width: 14px; height: 14px; }
+.idcard { background: linear-gradient(135deg, #0d1f17, #0c3a26 55%, #0c6b41); border: 1px solid rgba(233,208,138,.3); }
+.idcard .pid { background: linear-gradient(90deg, var(--gold-2), var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.trow { border: 1px solid rgba(12,32,24,.04); align-items: center; } .trow .amt { min-width: 84px; }
+.fare td { padding: 6px 0; } .fare tr.total td { font-size: 23px; }
+.toast { display: inline-flex; align-items: center; gap: 9px; background: #101714; border: 1px solid rgba(233,208,138,.25); border-radius: 16px; padding: 12px 16px; text-align: left; }
+.toast svg.i { width: 18px; height: 18px; color: var(--gold-2); flex: 0 0 auto; } .toast.err svg.i { color: #fff; } .toast.err { border-color: transparent; }
+.stars svg.i, .small svg.i { width: 14px; height: 14px; vertical-align: -2px; }
+.splash { background: radial-gradient(120% 90% at 50% 0%, #129a5c, #0c6b41 45%, #063d26); } .splash-logo { box-shadow: 0 0 0 3px rgba(233,208,138,.7), 0 0 0 14px rgba(255,255,255,.1), 0 0 0 30px rgba(255,255,255,.05); }
+.splash-tag { color: var(--gold-2); letter-spacing: .16em; text-transform: uppercase; font-size: 12px; }
+/* demo buttons */
+.card.demo { border: 1px dashed #dcc47f; background: linear-gradient(180deg, #fffdf6, var(--card)); }
+@media (prefers-color-scheme: dark) { .card.demo { background: var(--card); } .chip.gold, .fastest { background: #2e2710; color: var(--gold-2); border-color: #5a4a1c; } }
+.card.demo h2 svg.i { color: var(--gold); }
+.demo3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.demo3 button { display: grid; justify-items: center; gap: 3px; padding: 14px 6px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; box-shadow: var(--shadow); transition: transform .12s var(--ease), border-color .2s; }
+.demo3 button:active { transform: scale(.96); } .demo3 button svg.i { width: 26px; height: 26px; color: var(--brand); margin-bottom: 2px; }
+.demo3 button b { font-size: 14.5px; } .demo3 button span { font-size: 11.5px; color: var(--muted); }
+/* hexagons: 80–90% see-through */
+.hexcell { animation: hexwave 3.4s ease-in-out infinite; }
+@keyframes hexwave { 0%, 100% { fill-opacity: .02; stroke-opacity: .1; } 50% { fill-opacity: .1; stroke-opacity: .2; } }
+@keyframes hexhas { 0%, 100% { fill-opacity: .12; stroke-opacity: .2; } 50% { fill-opacity: .2; stroke-opacity: .2; } }
+.hexcell.centre { stroke-width: 1.6px; stroke-opacity: .2; }
+
+.bookany .vi.any { width: 54px; height: 54px; border-radius: 17px; background: linear-gradient(180deg, #11804e, #0c6b41); color: #fff; display: grid; place-items: center; flex: 0 0 auto; box-shadow: 0 8px 18px -8px rgba(12,107,65,.7); }
+.bookany .vi.any svg.i { width: 28px; height: 28px; }

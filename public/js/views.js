@@ -14,7 +14,7 @@ function connect() {
   S.es.addEventListener('trip', run(async () => { await refreshTrip(); render(); }));
   S.es.addEventListener('message', (e) => {
     const m = JSON.parse(e.data);
-    if (S.trip && m.tripId === S.trip.id) { S.messages.push(m); renderChat(); toast(`💬 ${m.body}`); }
+    if (S.trip && m.tripId === S.trip.id) { S.messages.push(m); renderChat(); toast(m.body, false, 'chat'); }
   });
   S.es.addEventListener('call', (e) => Call.onSignal(JSON.parse(e.data)));
   S.es.addEventListener('loc', (e) => {
@@ -186,7 +186,15 @@ function renderAuth(app) {
       </div>
       <button id="go" class="btn block">Get code</button>
     </div>
-    <p class="center muted small">${ic('lock')} Your number is never shown to drivers or customers.</p>`;
+    <p class="center muted small">${ic('lock')} Your number is never shown to drivers or customers.</p>
+    ${S.cfg.demoLogin ? `<div class="card demo"><div class="between"><h2 style="margin:0">${ic('sparkle')} Try the demo</h2><span class="chip gold">Test mode</span></div>
+      <p class="muted small" style="margin:6px 0 12px">One tap, no code. Loads sample drivers, passengers and trips around Lucknow.</p>
+      <div class="demo3"><button data-demo="rider">${ic('user')}<b>Passenger</b><span>Book a ride</span></button><button data-demo="driver">${ic('car')}<b>Driver</b><span>Accept a ride</span></button><button data-demo="admin">${ic('shield')}<b>Admin</b><span>Run Olub</span></button></div></div>` : ''}`;
+  $$('[data-demo]').forEach((b) => { b.onclick = run(async () => {
+    const r = await api('POST', '/api/auth/demo', { role: b.dataset.demo });
+    S.token = r.token; store('olub.token', r.token); S.me = r.user; S.tab = 'home'; S.booking = { mode: 'plate', driver: '', src: null, dst: null, pet: false }; S.estimate = null; S.nearby = null; S.quote = null;
+    connect(); await refreshTrip(); render(); toast(`Signed in as ${r.user.name}`);
+  }); });
   let step = 'phone', roleSel = 'rider';
   $$('#rolepick button').forEach((b) => { b.onclick = () => { roleSel = b.dataset.r; $$('#rolepick button').forEach((x) => x.classList.toggle('on', x === b)); }; });
   $('#see-terms').onclick = (e) => { e.preventDefault(); legalSheet(S.legal.required[roleSel]); };
@@ -564,7 +572,7 @@ async function renderInsights(app) {
   const nDone = trips.filter((t) => t.status === 'completed').length, nCan = trips.filter((t) => ['cancelled', 'rejected'].includes(t.status)).length, nLive = trips.length - nDone - nCan;
   const pct = (n) => (trips.length ? (n / trips.length) * 100 : 0);
   const bars = `<div class="bars">${x.days.map((d, i) => `<div class="${d.amount ? '' : 'z'}" style="height:${Math.max(4, d.amount / maxDay * 100)}%;animation-delay:${i * 30}ms"></div>`).join('')}</div><div class="axis"><span>14 days ago</span><span>Today</span></div>`;
-  const dash = `<div class="dash"><div class="between" style="position:relative;z-index:1"><span class="muted">${driver ? 'You kept in the last 30 days' : 'Spent in the last 30 days'}</span>${delta != null ? `<span class="chip" style="background:rgba(255,255,255,.14);color:#fff">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% this week</span>` : ''}</div>
+  const dash = `<div class="dash"><div class="between" style="position:relative;z-index:1"><span class="muted">${driver ? 'You kept in the last 30 days' : 'Spent in the last 30 days'}</span>${delta != null ? `<span class="chip" style="background:rgba(255,255,255,.14);color:#fff">${ic(delta >= 0 ? 'up' : 'down')}${Math.abs(delta)}% this week</span>` : ''}</div>
       <div class="bignum" style="position:relative;z-index:1">${rs(money(x.month))}</div>
       <div class="mini"><div><b>${x.month.trips}</b><span>trips</span></div><div><b>${x.month.km}</b><span>km</span></div><div><b>${rs(x.month.trips ? Math.round(money(x.month) / x.month.trips) : 0)}</b><span>per trip</span></div></div>
       <div style="position:relative;z-index:1;margin-top:12px">${bars}</div></div>`;
@@ -657,7 +665,7 @@ function renderProfile(app) {
   app.innerHTML = `
     <div class="idcard">${me.photo ? `<img src="${me.photo}" alt="" class="avatar" style="float:right;position:relative;z-index:1;width:72px;height:72px;border:2px solid #ffffff55">` : ''}<div class="muted small" style="color:#ffffffaa">${{ rider: 'OLUB CUSTOMER', driver: 'OLUB DRIVER', admin: 'OLUB ADMIN' }[me.role]}</div>
       <div class="pid">${esc(me.publicId)}</div><div style="font-size:20px;font-weight:800;margin-top:10px">${esc(me.name)}</div>
-      <div class="muted small" style="color:#ffffffcc">${[me.age && `${me.age} yrs`, me.gender, me.rating.count && `★ ${me.rating.average}`].filter(Boolean).join(' · ')}</div>
+      <div class="muted small" style="color:#ffffffcc">${[me.age && `${me.age} yrs`, me.gender, me.rating.count && `${ic('star', 'fill')} ${me.rating.average}`].filter(Boolean).join(' · ')}</div>
       <div class="chips" style="margin-top:12px;position:relative;z-index:1"><span class="chip">${ic('check')}Mobile confirmed</span>
         <span class="chip ${me.emailVerified ? '' : 'warn'}">${ic(me.emailVerified ? 'check' : 'clock')}Email ${me.emailVerified ? 'confirmed' : 'not confirmed'}</span></div></div>
     ${todoCard()}

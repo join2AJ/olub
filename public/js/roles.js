@@ -91,17 +91,17 @@ function showEstimate() {
       <p class="muted small" style="margin:4px 0 6px">${e.route.distanceKm} km ${e.route.source === 'estimate' ? '(estimated)' : 'by road'} · fares include the cab coming to you, GST and the Olub fee</p>
       ${n.options.length ? (() => { const lo = Math.min(...n.options.map((o) => o.riderPays)), hi = Math.max(...n.options.map((o) => o.riderPays)); const fast = Math.min(...n.options.map((o) => o.awayMin));
         const drop = new Date(Date.now() + (fast + e.route.etaMin) * 60000).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }); const range = lo === hi ? rs(lo) : `${rs(lo)} – ${rs(hi)}`;
-        return `<div class="bookany"><div class="cars">${CAR_ICON}${CAR_ICON}</div><div class="grow"><div class="between"><b style="font-size:18px">Book Any <span class="fastest">${ic('bolt')}Fastest</span></b><b>${range}</b></div>
+        return `<div class="bookany"><div class="vi any">${ic('car')}</div><div class="grow"><div class="between"><b style="font-size:18px">Book Any</b><span class="fastest">${ic('bolt')}Fastest</span></div><b class="range">${range}</b>
           <div class="muted small">${fast} min · Drop by ${drop}</div><div class="muted small">${n.options.map((o) => esc(o.label)).join(', ')}</div></div></div>
-          <button id="bookany" class="btn dark block" style="margin-top:8px">Book Any • ${range}</button><h3>Or choose a type</h3>`; })() : ''}
+          <button id="bookany" class="btn dark block" style="margin-top:8px">Book Any · ${range}</button><h3>Or choose a type</h3>`; })() : ''}
       ${n.options.map((o) => `<div class="opt"><div class="vi">${ic(VEH_ICON[o.type])}</div><div class="grow"><b>${esc(o.label)}</b> ${o.rating.count ? `<span class="stars small">${ic('star', 'fill')}${o.rating.average.toFixed(1)}</span>` : ''}
         <div class="away">${o.awayKm} km away · ${o.awayMin} min${o.count > 1 ? ` · ${o.count} nearby` : ''}</div></div>
-        <div style="text-align:right"><b class="p">${rs(o.riderPays)}</b><br><button class="btn req" data-match="${o.type}">Request</button></div></div>`).join('')
+        <div class="pr"><b class="p">${rs(o.riderPays)}</b><button class="btn req" data-match="${o.type}">Request</button></div></div>`).join('')
       || `<div class="empty" style="padding:16px 6px">${ic('search')}<div>No free cab within about ${S.cfg.platformFeeLongKm + 2} km right now${b.pet ? ' that takes pets' : ''}.<br>You can still book a cab standing in front of you.</div></div>`}
     </div>
     <div class="card"><h2>Cab right in front of you?</h2>
       <p class="muted small" style="margin:0 0 4px">No waiting and no charge for coming to you. Typical fares for this trip:</p>
-      <div class="chips" style="margin:8px 0">${e.options.map((o) => `<span class="chip grey">${esc(o.label)} ≈ ${rs(o.riderPays)}</span>`).join('')}</div>
+      <div class="chips" style="margin:8px 0">${e.options.map((o) => `<span class="chip grey">${esc(o.label)} ${rs(o.riderPays)}</span>`).join('')}</div>
       <button id="scan" class="btn accent block">${ic('camera')}Scan driver's QR</button>
       <div class="seg" style="margin-top:14px" id="mode"><button data-m="plate" class="${b.mode === 'plate' ? 'on' : ''}">Type number plate</button><button data-m="phone" class="${b.mode === 'phone' ? 'on' : ''}">Driver's mobile / Olub ID</button></div>
       <div class="row" style="margin-top:10px"><div class="plate-in grow ${b.mode === 'phone' ? 'phone' : ''}" id="plate-wrap"><span class="ind">IND</span>
@@ -277,7 +277,7 @@ function renderVehicle(app) {
   const docLabel = { selfie: 'Your photo', vehicle: 'Vehicle with number plate', license: 'Driving licence', rc: 'Registration (RC)', kyc: 'Aadhaar / ID' };
   const today = new Date().toISOString().slice(0, 10);
   app.innerHTML = `
-    <button class="btn small ghost" id="back" style="margin-bottom:10px">‹ Back</button>
+    <button class="btn small ghost" id="back" style="margin-bottom:10px">${ic('left')}Back</button>
     <div class="card"><h2>Your vehicle</h2><p class="muted small">Status: <b>${esc(d.status)}</b></p>
       <label class="f">Vehicle number</label><div class="plate-in"><span class="ind">IND</span><input id="v-num" value="${esc(d.vehicleNumber || '')}" placeholder="KA01AB1234" autocapitalize="characters"></div>
       <div class="grid2"><div><label class="f">Type</label><select id="v-type">${Object.entries(S.cfg.vehicles).map(([k, v]) => `<option value="${k}" ${d.vehicleType === k ? 'selected' : ''}>${v.label} · ${rs(v.perKm)}/km</option>`).join('')}</select></div>
@@ -467,7 +467,7 @@ const ADMIN = {
         <div class="muted small">${esc(S.cfg.lea.agencies[f.agency] || '')} · ${esc(f.officer || '')} · ${esc(f.caseRef || '')} · ${when(f.createdAt)}</div><p class="small" style="margin:4px 0">${esc(f.reason)}</p>
         ${f.status === 'active' ? `<div class="row">${f.driver ? `<button class="btn small ${f.driver.suspended ? 'ghost' : 'danger'}" data-susp="${f.driver.id}" data-on="${f.driver.suspended ? '' : '1'}">${f.driver.suspended ? 'Lift hold' : 'Put driver on hold'}</button>` : ''}<button class="btn small ghost" data-clear="${f.id}">Clear flag</button></div>` : ''}</div>`).join('') || '<p class="muted">No flags.</p>'}</div></div>
       <div class="card"><h2>Requests</h2><div class="list">${reqs.map((r) => `<div><div class="between"><b>${esc(r.ref)} · ${r.kind === 'flag' ? 'Vehicle flag' : 'Data request'}</b><span class="chip ${r.status === 'under_review' ? 'warn' : r.status === 'released' ? '' : 'grey'}">${esc(r.status.replace('_', ' '))}</span></div>
-        <div class="muted small">${esc(r.agencyLabel)} · ${esc(r.officerName)}, ${esc(r.designation || '')}, ${esc(r.office || '')}<br>${esc(r.email)} ${r.emailVerified ? '✓ verified' : '(not verified)'} · ${esc(r.caseRef)}${r.legalBasis ? ` · ${esc(r.legalBasis)}` : ''}</div>
+        <div class="muted small">${esc(r.agencyLabel)} · ${esc(r.officerName)}, ${esc(r.designation || '')}, ${esc(r.office || '')}<br>${esc(r.email)} ${r.emailVerified ? '(verified)' : '(not verified)'} · ${esc(r.caseRef)}${r.legalBasis ? ` · ${esc(r.legalBasis)}` : ''}</div>
         <p class="small" style="margin:4px 0">${esc(r.details || '')} ${r.vehicleNumber ? `<span class="plate">${esc(r.vehicleNumber)}</span>` : ''} ${r.driverId ? esc(r.driverId) : ''} ${r.tripId ? `trip #${r.tripId}` : ''}</p>
         ${r.status === 'under_review' ? `<p class="small muted">Auto-answer on ${when(r.autoReleaseAt)} · promised by ${when(r.answerBy)}</p>
           <div class="row wrap"><button class="btn small ghost" data-proof="${r.id}">${ic('eye')}Letter</button><button class="btn small" data-rel="${r.id}">Release now</button><button class="btn small danger" data-ref="${r.id}">Refuse</button></div>` : `<p class="small muted">${esc(r.response || '')}</p>`}</div>`).join('') || '<p class="muted">No requests.</p>'}</div></div>`;
@@ -516,11 +516,11 @@ const ADMIN = {
       $$('[data-u]').forEach((b) => { b.onclick = run(async () => {
         const t = await api('GET', `/api/admin/users/${b.dataset.u}/trail`);
         $('#trail').innerHTML = `<div class="card"><h2>${esc(t.user.name)} · ${esc(t.user.publicId)}</h2>
-          ${kv({ Mobile: t.user.phone, Email: `${t.user.email || '—'}${t.user.emailVerified ? ' ✓' : ''}`, 'Age / sex': `${t.user.age ?? '—'} / ${t.user.gender || '—'}`, Rating: t.user.rating.average ?? '—', 'Trusted contact': t.user.trusted ? `${t.user.trusted.name} ${t.user.trusted.phone}` : '—' })}
+          ${kv({ Mobile: t.user.phone, Email: `${t.user.email || '—'}${t.user.emailVerified ? ' (confirmed)' : ''}`, 'Age / sex': `${t.user.age ?? '—'} / ${t.user.gender || '—'}`, Rating: t.user.rating.average ?? '—', 'Trusted contact': t.user.trusted ? `${t.user.trusted.name} ${t.user.trusted.phone}` : '—' })}
           <h3>Consents</h3>${t.consents.map((c) => `<div class="small">${esc(c.doc)} v${esc(c.version)} · ${when(c.acceptedAt)}${c.withdrawnAt ? ' · withdrawn' : ''}</div>`).join('')}
-          <h3>Trips (${t.trips.length})</h3>${t.trips.map((x) => `<div class="small">#${x.id} ${esc(x.status)} · ${esc(x.from)} → ${esc(x.to)} · ${x.amount != null ? rs(x.amount) : ''} · ${x.fitDeclaredAt ? 'fit ✓' : ''} · ${when(x.createdAt)}<br><span class="muted">${esc(x.rider)} ↔ ${esc(x.driver)}</span></div>`).join('') || '<p class="muted small">None</p>'}
-          <h3>Ratings received (${t.ratingsReceived.length})</h3>${t.ratingsReceived.map((r) => `<div class="small">★ ${r.overall} from ${esc(r.from)} — ${esc([r.good, r.bad, r.improve].filter(Boolean).join(' / '))}</div>`).join('') || '<p class="muted small">None</p>'}
-          <h3>Ratings given (${t.ratingsGiven.length})</h3>${t.ratingsGiven.map((r) => `<div class="small">★ ${r.overall} to ${esc(r.to)} — ${esc([r.good, r.bad, r.improve].filter(Boolean).join(' / '))}</div>`).join('') || '<p class="muted small">None</p>'}
+          <h3>Trips (${t.trips.length})</h3>${t.trips.map((x) => `<div class="small">#${x.id} ${esc(x.status)} · ${esc(x.from)} → ${esc(x.to)} · ${x.amount != null ? rs(x.amount) : ''} · ${x.fitDeclaredAt ? 'fit declared' : ''} · ${when(x.createdAt)}<br><span class="muted">${esc(x.rider)} with ${esc(x.driver)}</span></div>`).join('') || '<p class="muted small">None</p>'}
+          <h3>Ratings received (${t.ratingsReceived.length})</h3>${t.ratingsReceived.map((r) => `<div class="small">${ic('star', 'fill')} ${r.overall} from ${esc(r.from)} — ${esc([r.good, r.bad, r.improve].filter(Boolean).join(' / '))}</div>`).join('') || '<p class="muted small">None</p>'}
+          <h3>Ratings given (${t.ratingsGiven.length})</h3>${t.ratingsGiven.map((r) => `<div class="small">${ic('star', 'fill')} ${r.overall} to ${esc(r.to)} — ${esc([r.good, r.bad, r.improve].filter(Boolean).join(' / '))}</div>`).join('') || '<p class="muted small">None</p>'}
           <h3>Full audit trail (${t.audit.length})</h3><div class="list">${t.audit.map((a) => line({ ...a, actorName: a.actorRole })).join('')}</div></div>`;
         $('#trail').scrollIntoView({ behavior: 'smooth' });
       }); });

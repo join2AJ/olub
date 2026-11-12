@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **12 Nov 2026, 22:35 IST**
+Last updated: **12 Nov 2026, 22:47 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 89 complete · 11 in progress · 6 planned · 10 need you
+**Totals:** 94 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -166,6 +166,11 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.10 | Animation on the map | ✅ Complete | 12 Nov 2026, 22:35 | A wave runs outward through the hexagons from the pickup; cells with a free cab glow; cars drop in and idle |
 | 10.11 | Map styled like the Ola screenshot | 🟡 In progress | 12 Nov 2026, 22:35 | Light lavender-grey look, cars seen from above, name pills on pickup and drop. Built on free OpenStreetMap tiles; the exact Ola / Google look needs their paid map tiles |
 | 10.12 | "Book Any": ask nearby drivers of any type, nearest first | ✅ Complete | 12 Nov 2026, 22:35 | Shows the price range, minutes away and drop time, like Ola's card |
+| 10.13 | Hexagons 80–90% transparent | ✅ Complete | 12 Nov 2026, 22:47 | Lines and fill stay between 2% and 20% opacity; the map reads through them |
+| 10.14 | Icons instead of emoji and symbols | ✅ Complete | 12 Nov 2026, 22:47 | Chat toast, up/down, stars, ticks, back arrow all use the app's icon set |
+| 10.15 | Better alignment | ✅ Complete | 12 Nov 2026, 22:47 | Cab rows on one grid (icon, text, price over button); equal-height tiles |
+| 10.16 | More premium look in the original green theme | ✅ Complete | 12 Nov 2026, 22:47 | Deeper green, soft gold trim, calmer spacing and shadows |
+| 10.17 | One-tap demo buttons: Passenger, Driver, Admin | ✅ Complete | 12 Nov 2026, 22:47 | On the sign-in screen in test mode. Loads the demo data by itself. Remove with `OLUB_DEMO_LOGIN=0` |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |

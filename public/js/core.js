@@ -80,6 +80,11 @@ const P = {
   bolt: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
   id: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-1.5 1.7-2 3-2s2.5.5 3 2M15 10h3M15 14h3"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  left: '<path d="M15 6l-6 6 6 6"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  sparkle: '<path d="M12 3l1.800 5.200L19 10l-5.200 1.800L12 17l-1.800-5.200L5 10l5.200-1.800z"/><path d="M19 16l.700 2 2 .700-2 .700-.700 2-.700-2-2-.700 2-.700z"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
 };
 const ic = (name, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[name] || ''}</svg>`;
@@ -87,9 +92,9 @@ const starsHtml = (r) => (r && r.count ? `<span class="stars">${ic('star', 'fill
 
 // ---------- feedback ----------
 let toastTimer;
-function toast(msg, err = false) {
+function toast(msg, err = false, icon = null) {
   const t = $('#toast');
-  t.textContent = msg; t.className = `toast${err ? ' err' : ''}`; t.hidden = false;
+  t.innerHTML = `${ic(icon || (err ? 'alert' : 'check'))}<span>${esc(msg)}</span>`; t.className = `toast${err ? ' err' : ''}`; t.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, err ? 4500 : 3000);
   if (err && navigator.vibrate) navigator.vibrate(60);
 }
@@ -181,7 +186,7 @@ function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
     h.layers.forEach((l) => l.remove()); h.layers = [];
     const pts = [];
     const road = poly ? decodePolyline(poly) : null;
-    const pill = (m, p, cls) => (p.name ? m.bindTooltip(`<i class="${cls}"></i>${esc(p.name.length > 24 ? `${p.name.slice(0, 23)}…` : p.name)} ›`, { permanent: true, direction: 'right', offset: [12, 0], className: 'mappill' }) : m);
+    const pill = (m, p, cls) => (p.name ? m.bindTooltip(`<i class="${cls}"></i>${esc(p.name.length > 24 ? `${p.name.slice(0, 23)}…` : p.name)}`, { permanent: true, direction: 'right', offset: [12, 0], className: 'mappill' }) : m);
     if (a) { h.layers.push(pill(L.marker([a.lat, a.lng], { icon: icon('') }), a, 'pp').addTo(map)); pts.push([a.lat, a.lng]); }
     if (b) { h.layers.push(pill(L.marker([b.lat, b.lng], { icon: icon('d') }), b, 'pd').addTo(map)); pts.push([b.lat, b.lng]); }
     if (road && road.length > 1) {
@@ -218,8 +223,8 @@ function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
     for (let r = Math.floor(y0 / (1.5 * s)); r <= Math.ceil(y1 / (1.5 * s)); r++) {
       for (let q = Math.floor(x0 / (SQ3 * s) - r / 2); q <= Math.ceil(x1 / (SQ3 * s) - r / 2); q++) {
         const ring = (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2; const hasCab = cabCells.has(`${q},${r}`);
-        const poly = L.polygon(hexCorners({ q, r }, o, s), { color: '#0f7b4a', weight: hasCab ? 2.2 : 1, opacity: hasCab ? .95 : .34, fillColor: '#0f7b4a',
-          fillOpacity: hasCab ? .3 : .05, interactive: false, className: `hexcell${hasCab ? ' has' : ''}${ring === 0 ? ' centre' : ''}` }).addTo(map);
+        const poly = L.polygon(hexCorners({ q, r }, o, s), { color: '#0f7b4a', weight: hasCab ? 1.6 : 1, opacity: hasCab ? .2 : .14, fillColor: '#0f7b4a',
+          fillOpacity: hasCab ? .16 : .03, interactive: false, className: `hexcell${hasCab ? ' has' : ''}${ring === 0 ? ' centre' : ''}` }).addTo(map);
         const el = poly.getElement(); if (el) el.style.animationDelay = `${(ring % 14) * 0.22}s`; // a wave that keeps moving outwards from the pickup
         h.hexLayers.push(poly);
       }

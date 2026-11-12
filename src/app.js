@@ -522,7 +522,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), 
     overdue: { warn: C.OVERDUE_WARN_MIN, alert: C.OVERDUE_ALERT_MIN }, minAge: C.MIN_AGE,
     dsrTypes: C.DSR_TYPES, dsrPublicDays: C.DSR_PUBLIC_SLA_DAYS,
     dsrCorrectionFields: Object.fromEntries(Object.entries(C.DSR_CORRECTION_FIELDS).map(([k, v]) => [k, { label: v.label, mode: v.mode }])),
-    liveTraffic: !!C.GOOGLE_MAPS_API_KEY, legalVersion: legal.VERSION, matchOfferSeconds: C.MATCH_OFFER_SECONDS,
+    liveTraffic: !!C.GOOGLE_MAPS_API_KEY, legalVersion: legal.VERSION, demoLogin: C.DEMO_LOGIN, matchOfferSeconds: C.MATCH_OFFER_SECONDS,
     gst: { ride: C.RIDE_GST_RATE, platformFee: C.PLATFORM_FEE_GST_RATE }, company: C.COMPANY,
     wallet: { min: C.WALLET_MIN_BALANCE, maxTopup: C.WALLET_MAX_TOPUP },
     duty: { maxHours: C.DUTY_MAX_HOURS, restHours: C.DUTY_REST_HOURS },
@@ -606,6 +606,37 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), 
     db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
       .run(sha256(token), user.id, now(), now() + C.SESSION_TTL_MS);
     req.user = user;
+    return { token, user: meView(getUser(user.id)) };
+  }));
+
+  // One-tap demo sign-in (test mode only): loads the demo data if needed and signs in as a ready-made account.
+  app.post('/api/auth/demo', rateLimit, route((req) => {
+    if (!C.DEMO_LOGIN) throw httpError(404, 'Not found');
+    loadDemo();
+    const kind = req.body.role;
+    let user;
+    if (kind === 'admin') {
+      const phone = C.ADMIN_PHONES[0];
+      user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
+      if (!user) {
+        const ins = db.prepare("INSERT INTO users (public_id, phone, phone_verified_at, name, role, created_at) VALUES (?, ?, ?, 'Olub Admin', 'admin', ?)").run(newPublicId('OLB-A', 'users'), phone, now(), now());
+        user = getUser(ins.lastInsertRowid);
+      }
+    } else if (kind === 'driver') {
+      // The driver who has a request waiting right now (so both sides of a booking can be tried); otherwise a free one.
+      const waiting = db.prepare("SELECT driver_id FROM trips WHERE status = 'requested' ORDER BY id DESC LIMIT 1").get();
+      user = waiting ? getUser(waiting.driver_id) : db.prepare("SELECT * FROM users WHERE phone = '9000000106'").get();
+    } else {
+      // A passenger with history and no ride in progress, so they can book straight away.
+      user = db.prepare("SELECT * FROM users WHERE phone = '9000000201'").get();
+      const busy = db.prepare("SELECT id FROM trips WHERE rider_id = ? AND (status IN ('requested','accepted','started') OR (status = 'completed' AND paid_at IS NULL))").get(user.id);
+      if (busy) user = db.prepare("SELECT * FROM users WHERE phone = '9000000204'").get();
+    }
+    if (!user) throw httpError(409, 'Demo data is not available');
+    recordConsents(user, req);
+    const token = crypto.randomBytes(32).toString('hex');
+    db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(sha256(token), user.id, now(), now() + C.SESSION_TTL_MS);
+    req.user = user; req.auditNote = `demo sign-in as ${kind || 'passenger'}`;
     return { token, user: meView(getUser(user.id)) };
   }));
 
@@ -1474,7 +1505,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), 
   }));
 
   // Test data: drivers, customers and trips in every state.
-  const loadDemo = () => seedDemo({ db, C, now, legal, getRates, newPublicId, fy, audit });
+  function loadDemo() { return seedDemo({ db, C, now, legal, getRates, newPublicId, fy, audit }); }
   admin.post('/demo', route(() => loadDemo()));
   admin.get('/demo', route(() => ({
     loaded: !!db.prepare("SELECT 1 FROM users WHERE phone = '9000000101'").get(),
