@@ -181,6 +181,6 @@ function makeMap(el, { src, dst, last, path, onPick } = {}) {
   };
   h.setRoute(src, dst); h.setCar(last); h.setTrail(path);
   if (onPick) map.on('click', (e) => onPick({ lat: e.latlng.lat, lng: e.latlng.lng }));
-  setTimeout(() => map.invalidateSize(), 60);
+  setTimeout(() => { if (el.isConnected && map._loaded) map.invalidateSize(); }, 60);
   return h;
 }

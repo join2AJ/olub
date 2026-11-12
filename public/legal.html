@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f7b4a"><title>Olub — terms, liability and privacy</title>
+  <link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/styles.css"><style>main{padding-bottom:24px}</style>
+</head>
+<body>
+  <header class="top"><div class="brand"><span class="logo">O</span><span>Olub</span></div><span class="idchip">TERMS & PRIVACY</span></header>
+  <main id="app"><div class="skel"></div></main>
+  <div id="toast" class="toast" hidden></div>
+  <script src="/js/digipin.js"></script><script src="/js/core.js"></script>
+  <script>
+  'use strict';
+  Promise.all([api('GET', '/api/legal'), api('GET', '/api/config')]).then(([l, c]) => {
+    $('#app').innerHTML = `${Object.values(l.docs).map((d) => `<div class="card legal"><h2>${esc(d.title)}</h2>${d.body.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`).join('')}
+      <div class="card"><h2>Your privacy requests</h2><p>Open the Olub app → Profile → Privacy &amp; my data. We accept requests only from accounts with a confirmed mobile number and email, and we answer within <b>${c.dsrPublicDays - 2}–${c.dsrPublicDays} days</b>.</p></div>
+      <div class="card"><h2>Police, RTO and courts</h2><p>Government authorities can request information or flag a vehicle on the <a href="/authority">authority page</a>. We answer within ${c.lea.publicDays} days.</p></div>
+      <p class="center muted small">${esc(c.company.name)} · ${esc(c.company.grievanceOfficer)} · version ${esc(l.version)}</p>`;
+  });
+  </script>
+</body>
+</html>

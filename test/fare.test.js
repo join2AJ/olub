@@ -44,7 +44,7 @@ test('traffic waiting is charged after the free minutes', () => {
 test('tolls and pet charge go fully to the driver', () => {
   const f = calculateFare({ ...base, tolls: [{ name: 'A', amount: 70 }], petCharge: 50 });
   assert.equal(f.driverFare, 220 + 70 + 50);
-  assert.equal(f.taxes.rideGst, 13.5, 'GST applies to ride + pet charge, not to tolls');
+  assert.equal(f.taxes.rideGst, 14, 'GST applies to ride + pet charge, not to tolls');
   assert.equal(f.breakdown.petCharge, 50);
 });
 

@@ -1,12 +1,13 @@
 {
   "name": "olub",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Olub — book the cab in front of you. ₹5 per trip, rest goes to the driver.",
   "main": "src/server.js",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
     "dev": "node --watch --disable-warning=ExperimentalWarning src/server.js",
-    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
+    "backup": "node --disable-warning=ExperimentalWarning scripts/backup.js"
   },
   "repository": {
     "type": "git",

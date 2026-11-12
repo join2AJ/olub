@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Olub</string>
+    <string name="tracking_channel">Ride tracking</string>
+    <string name="tracking_title">Olub ride in progress</string>
+    <string name="tracking_text">Sharing this ride\'s live location for safety.</string>
+</resources>

@@ -23,7 +23,7 @@ module.exports = {
   SAC_RIDE: '996412', SAC_PLATFORM: '998599',
   COMPANY: {
     name: process.env.OLUB_LEGAL_NAME || 'Olub (legal entity name pending)',
-    gstin: process.env.OLUB_GSTIN || 'GSTIN pending',
+    gstin: process.env.OLUB_GSTIN || 'pending',
     address: process.env.OLUB_ADDRESS || 'Registered address pending',
     grievanceOfficer: process.env.OLUB_GRIEVANCE || 'Grievance Officer — grievance@olub.example',
   },

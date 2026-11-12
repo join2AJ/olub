@@ -47,7 +47,7 @@ function calculateFare(p) {
   const platformFee = p.calamity ? C.PLATFORM_FEE_CALAMITY : C.PLATFORM_FEE;
   // GST: the platform fee is GST-inclusive; ride GST is charged on top of the ride (not on tolls).
   const gstRate = p.gstRate ?? C.RIDE_GST_RATE;
-  const rideGst = round2((rideFare + waitCharge + petCharge) * gstRate);
+  const rideGst = Math.round((rideFare + waitCharge + petCharge) * gstRate); // rounded to the rupee
   const platformFeeGst = round2(platformFee - platformFee / (1 + C.PLATFORM_FEE_GST_RATE));
   const discount = Math.max(0, p.discount || 0);
   const riderPays = round2(Math.max(0, driverFare + rideGst + platformFee - discount));

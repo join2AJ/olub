@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.olub.android'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.olub.android'
+        minSdk 24
+        targetSdk 35
+        versionCode 2
+        versionName '0.2.0'
+        buildConfigField 'String', 'DEFAULT_SERVER', "\"${project.findProperty('olubServer') ?: ''}\""
+    }
+
+    buildFeatures { buildConfig true }
+
+    // The app's screens are the same files the server serves from /public.
+    sourceSets { main.assets.srcDirs = ['../../public'] }
+
+    buildTypes {
+        debug {
+            // Test builds may talk to a plain-http server on your Wi-Fi.
+            manifestPlaceholders = [cleartext: 'true']
+        }
+        release {
+            minifyEnabled false
+            manifestPlaceholders = [cleartext: 'false']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.15.0'
+}

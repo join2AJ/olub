@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f7b4a"><meta name="robots" content="noindex">
+  <title>Olub — live ride</title>
+  <link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/vendor/leaflet/leaflet.css"><link rel="stylesheet" href="/styles.css">
+  <style>main{padding-bottom:24px}.map{height:52vh}</style>
+</head>
+<body>
+  <header class="top"><div class="brand"><span class="logo">O</span><span>Olub</span></div><span class="idchip">LIVE RIDE</span></header>
+  <main id="app"><div class="skel"></div><div class="skel"></div></main>
+  <script src="/vendor/leaflet/leaflet.js"></script><script src="/js/digipin.js"></script><script src="/js/core.js"></script>
+  <script>
+  'use strict';
+  (function () {
+    var token = location.pathname.split('/').pop(), map = null, built = false;
+    function ago(ts) { var s = Math.round((Date.now() - ts) / 1000); return s < 60 ? 'just now' : Math.round(s / 60) + ' min ago'; }
+    async function load() {
+      var t;
+      try { t = await fetch('/api/track/' + token).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error); return j; }); }); }
+      catch (e) { $('#app').innerHTML = '<div class="card empty">' + ic('pin') + '<div>' + esc(e.message) + '</div></div>'; return; }
+      var st = { requested: 'Waiting for the driver', accepted: 'Driver is at the pickup', started: 'On the way', completed: 'Reached safely', cancelled: 'Ride cancelled', rejected: 'Ride cancelled' }[t.status];
+      var alert = t.sosAt ? '<div class="card alert"><b>' + ic('alert') + ' SOS was pressed in this ride.</b> Call ' + esc(t.traveller) + ' now, or call 112.<a class="btn danger block" href="tel:112">Call 112</a></div>'
+        : t.overdueLevel === 2 ? '<div class="card alert"><b>' + ic('alert') + ' ' + t.lateMin + ' minutes late.</b> Please call ' + esc(t.traveller) + ' and check on them.</div>'
+        : t.offRoute ? '<div class="card alert"><b>' + ic('alert') + ' The cab is away from the expected route.</b> Please check on ' + esc(t.traveller) + '.</div>'
+        : t.lateMin >= 5 ? '<div class="card warn">' + ic('clock') + ' Running about ' + t.lateMin + ' minutes late.</div>' : '';
+      var eta = t.status === 'started' && t.expectedEndAt ? 'Expected by ' + new Date(t.expectedEndAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : '';
+      var html = alert + '<div class="card"><div class="between"><h2 style="margin:0">' + esc(t.traveller) + '\'s ride</h2><span class="chip ' + (t.status === 'completed' ? '' : 'warn') + '">' + esc(st) + '</span></div>'
+        + '<p class="muted" style="margin:4px 0 10px">' + esc(eta) + '</p>'
+        + '<div class="route" style="pointer-events:none"><button><span class="dotp"></span><span class="t">' + esc(t.src.name) + '</span>' + pinTag(t.src) + '</button><button><span class="dotd"></span><span class="t">' + esc(t.dst.name) + '</span>' + pinTag(t.dst) + '</button></div>'
+        + (t.last ? '<p class="muted small" style="margin:8px 0 0">' + ic('target') + ' Now at <span class="digipin">' + esc(t.last.digipin || '') + '</span> · ' + t.last.lat.toFixed(5) + ', ' + t.last.lng.toFixed(5) + ' · updated ' + ago(t.last.at) + '</p>' : '<p class="muted small" style="margin:8px 0 0">Waiting for the cab\'s GPS…</p>') + '</div>'
+        + '<div class="card"><div class="driver">' + (t.driver.photo ? '<img class="avatar" src="' + t.driver.photo + '" alt="">' : '<div class="avatar">' + esc(t.driver.name[0]) + '</div>')
+        + '<div><b>' + esc(t.driver.name) + '</b> ' + starsHtml(t.driver.rating) + '<div style="margin-top:4px"><span class="plate">' + esc(t.driver.vehicleNumber) + '</span> <span class="muted">' + esc(t.driver.vehicleLabel) + ' ' + esc(t.driver.vehicleModel || '') + '</span></div></div></div></div>'
+        + '<p class="center muted small">Shared by ' + esc(t.traveller) + ' through Olub. This page updates by itself and stops working 2 hours after the ride.</p>';
+      if (!built) { $('#app').innerHTML = '<div id="tmap" class="map"></div><div id="info"></div>'; map = makeMap($('#tmap'), { src: t.src, dst: t.dst }); built = true; }
+      $('#info').innerHTML = html;
+      if (map) { map.setCar(t.last); map.setTrail(t.path); }
+    }
+    function pinTag(p) { return p && p.digipin ? '<span class="digipin">' + esc(p.digipin) + '</span>' : ''; }
+    load(); setInterval(load, 8000);
+  }());
+  </script>
+</body>
+</html>
