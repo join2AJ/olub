@@ -181,8 +181,9 @@ function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
     h.layers.forEach((l) => l.remove()); h.layers = [];
     const pts = [];
     const road = poly ? decodePolyline(poly) : null;
-    if (a) { h.layers.push(L.marker([a.lat, a.lng], { icon: icon('') }).addTo(map)); pts.push([a.lat, a.lng]); }
-    if (b) { h.layers.push(L.marker([b.lat, b.lng], { icon: icon('d') }).addTo(map)); pts.push([b.lat, b.lng]); }
+    const pill = (m, p, cls) => (p.name ? m.bindTooltip(`<i class="${cls}"></i>${esc(p.name.length > 24 ? `${p.name.slice(0, 23)}…` : p.name)} ›`, { permanent: true, direction: 'right', offset: [12, 0], className: 'mappill' }) : m);
+    if (a) { h.layers.push(pill(L.marker([a.lat, a.lng], { icon: icon('') }), a, 'pp').addTo(map)); pts.push([a.lat, a.lng]); }
+    if (b) { h.layers.push(pill(L.marker([b.lat, b.lng], { icon: icon('d') }), b, 'pd').addTo(map)); pts.push([b.lat, b.lng]); }
     if (road && road.length > 1) {
       // The actual road path.
       h.layers.push(L.polyline(road, { color: dark ? '#000' : '#fff', weight: 9, opacity: .9, lineCap: 'round', lineJoin: 'round' }).addTo(map));
@@ -191,20 +192,52 @@ function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
     } else if (pts.length === 2) { h.layers.push(L.polyline(pts, { color: '#0f7b4a', weight: 4, opacity: .55, dashArray: '2 9', lineCap: 'round' }).addTo(map)); map.fitBounds(pts, { padding: [36, 36] }); }
     else if (pts.length === 1) map.setView(pts[0], 14);
   };
-  // Hexagonal search area around the pickup; cells with a free cab are stronger.
-  h.setHexes = (hexes) => {
-    h.hexLayers.forEach((l) => l.remove()); h.hexLayers = [];
-    (hexes || []).forEach((x, i) => {
-      const poly = L.polygon(x.corners, { color: '#0f7b4a', weight: x.cabs ? 2 : 1, opacity: x.cabs ? .9 : .35, fillColor: '#0f7b4a',
-        fillOpacity: x.cabs ? .28 : Math.max(.03, .12 - x.ring * .025), interactive: false, className: 'hexcell' }).addTo(map);
-      const el = poly.getElement(); if (el) el.style.animationDelay = `${x.ring * 140 + (i % 6) * 15}ms`;
-      h.hexLayers.push(poly);
-    });
+  // ---- hexagon grid: always visible, drawn for whatever part of the map is on screen ----
+  const HKX = (lat) => 111.32 * Math.cos((lat * Math.PI) / 180), HKY = 110.57, SQ3 = Math.sqrt(3);
+  const hexCell = (p, o, s) => {
+    const x = (p.lng - o.lng) * HKX(o.lat), y = (p.lat - o.lat) * HKY;
+    const qf = ((SQ3 / 3) * x - y / 3) / s, rf = ((2 / 3) * y) / s;
+    let q = Math.round(qf), r = Math.round(rf); const sv = Math.round(-qf - rf);
+    const dq = Math.abs(q - qf), dr = Math.abs(r - rf), ds = Math.abs(sv + qf + rf);
+    if (dq > dr && dq > ds) q = -r - sv; else if (dr > ds) r = -q - sv;
+    return { q, r };
   };
-  // Free cabs around (rough positions).
+  const hexCorners = (c, o, s) => {
+    const cx = s * SQ3 * (c.q + c.r / 2), cy = s * 1.5 * c.r; const out = [];
+    for (let i = 0; i < 6; i++) { const a = (Math.PI / 180) * (60 * i - 30); out.push([o.lat + (cy + s * Math.sin(a)) / HKY, o.lng + (cx + s * Math.cos(a)) / HKX(o.lat)]); }
+    return out;
+  };
+  const drawHexGrid = () => {
+    h.hexLayers.forEach((l) => l.remove()); h.hexLayers = [];
+    const o = h.hexOrigin; if (!o) return;
+    const b = map.getBounds().pad(0.08);
+    const x0 = (b.getWest() - o.lng) * HKX(o.lat), x1 = (b.getEast() - o.lng) * HKX(o.lat), y0 = (b.getSouth() - o.lat) * HKY, y1 = (b.getNorth() - o.lat) * HKY;
+    // Cell size doubles when zoomed far out, so the grid stays readable (the search itself uses 0.6 km cells).
+    let s = 0.6; while (((x1 - x0) / (SQ3 * s)) * ((y1 - y0) / (1.5 * s)) > 320) s *= 2;
+    const cabCells = new Set((h.hexCabs || []).map((c) => { const k = hexCell(c, o, s); return `${k.q},${k.r}`; }));
+    for (let r = Math.floor(y0 / (1.5 * s)); r <= Math.ceil(y1 / (1.5 * s)); r++) {
+      for (let q = Math.floor(x0 / (SQ3 * s) - r / 2); q <= Math.ceil(x1 / (SQ3 * s) - r / 2); q++) {
+        const ring = (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2; const hasCab = cabCells.has(`${q},${r}`);
+        const poly = L.polygon(hexCorners({ q, r }, o, s), { color: '#0f7b4a', weight: hasCab ? 2.2 : 1, opacity: hasCab ? .95 : .34, fillColor: '#0f7b4a',
+          fillOpacity: hasCab ? .3 : .05, interactive: false, className: `hexcell${hasCab ? ' has' : ''}${ring === 0 ? ' centre' : ''}` }).addTo(map);
+        const el = poly.getElement(); if (el) el.style.animationDelay = `${(ring % 14) * 0.22}s`; // a wave that keeps moving outwards from the pickup
+        h.hexLayers.push(poly);
+      }
+    }
+  };
+  h.setHexGrid = (origin, cabs) => { h.hexOrigin = origin || h.hexOrigin; h.hexCabs = cabs || []; drawHexGrid(); };
+  map.on('moveend', drawHexGrid);
+  // Kept for older callers.
+  h.setHexes = () => {};
+  const CAR_SVG = '<svg viewBox="0 0 24 44" width="20" height="36"><rect x="2" y="2" width="20" height="40" rx="8" fill="#fff" stroke="#1b1f1d" stroke-width="1.6"/><rect x="5" y="9" width="14" height="8" rx="3" fill="#1b1f1d"/><rect x="5" y="28" width="14" height="6" rx="3" fill="#1b1f1d"/><rect x="5.5" y="18.500" width="2" height="8" rx="1" fill="#1b1f1d" opacity=".55"/><rect x="16.500" y="18.500" width="2" height="8" rx="1" fill="#1b1f1d" opacity=".55"/></svg>';
+  // Free cabs around (rough positions), drawn as little cars seen from above.
   h.setCabs = (cabs) => {
     h.cabLayers.forEach((l) => l.remove()); h.cabLayers = [];
-    (cabs || []).forEach((c) => h.cabLayers.push(L.marker([c.lat, c.lng], { icon: L.divIcon({ className: '', html: `<div class="cab">${ic(c.type === 'bike' ? 'bolt' : 'car')}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false }).addTo(map)));
+    (cabs || []).forEach((c, i) => {
+      const turn = Math.round((c.lat * 7919 + c.lng * 104729) % 360);
+      h.cabLayers.push(L.marker([c.lat, c.lng], { icon: L.divIcon({ className: '', html: `<div class="cabtop" style="--turn:${turn}deg;animation-delay:${i * 90}ms">${c.type === 'bike' ? ic('bolt') : CAR_SVG}</div>`, iconSize: [36, 36], iconAnchor: [18, 18] }), interactive: false }).addTo(map));
+    });
+    h.hexCabs = cabs || []; drawHexGrid();
   };
   h.setCar = (p) => {
     if (!p) return;

@@ -38,7 +38,7 @@ const text = (s, max = 300) => String(s || '').trim().slice(0, max) || null;
 const DOC_KEYS = ['license', 'rc', 'kyc', 'vehicle', 'selfie'];
 const ID_PREFIX = { rider: 'OLB-C', driver: 'OLB-D', admin: 'OLB-A' };
 
-function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v6.db'), clock = Date.now, maps = defaultMaps } = {}) {
+function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), clock = Date.now, maps = defaultMaps } = {}) {
   const db = openDb(dbFile);
   const now = () => clock();
   const audit = createAudit(db, clock);
@@ -450,7 +450,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v6.db'), 
       payTiming: trip.pay_timing, prepaid: trip.prepaid_amount ? { amount: trip.prepaid_amount, method: trip.prepaid_method } : null,
       balanceDue: trip.paid_at ? 0 : r2(Math.max(0, bill.riderPays - (trip.prepaid_amount || 0))),
       invoiceNo: trip.invoice_no, safety: json(trip.safety),
-      matched: !!trip.match_mode, pickupKm: trip.pickup_km || 0,
+      matched: !!trip.match_mode, matchAny: !!trip.match_any, pickupKm: trip.pickup_km || 0,
       cancellation: trip.status === 'cancelled' ? {
         by: trip.cancel_by, reason: trip.cancel_reason, fee: trip.cancel_fee, charged: trip.cancel_charged,
         youPay: trip.cancel_charged === (isRider ? 'rider' : 'driver') ? trip.cancel_fee : 0,
@@ -900,7 +900,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v6.db'), 
     const src = { lat: trip.src_lat, lng: trip.src_lng };
     const body = { src: { ...src, name: trip.src_name, state: trip.state }, dst: { lat: trip.dst_lat, lng: trip.dst_lng, name: trip.dst_name }, pet: !!trip.pet };
     const oldDriver = trip.driver_id;
-    for (const c of nearbyCabs(src, { vehicleType: quote.vehicleType, pet: !!trip.pet, exclude: tried, riderId: trip.rider_id })) {
+    for (const c of nearbyCabs(src, { vehicleType: trip.match_any ? null : quote.vehicleType, pet: !!trip.pet, exclude: tried, riderId: trip.rider_id })) {
       try {
         const leg = await pickupLeg(c, src);
         const q = await buildQuote(body, getUser(trip.rider_id), { driver: c.d, pickupKm: leg.km });
@@ -939,8 +939,9 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v6.db'), 
     let extra = {}; let matched = null;
     if (req.body.match) {
       const src0 = resolvePoint(req.body.src, 'Pickup');
-      matched = nearbyCabs(src0, { vehicleType: req.body.match.vehicleType, pet: !!req.body.pet, riderId: req.user.id })[0];
-      if (!matched) throw httpError(409, 'No cab of that type is free near you right now');
+      // match.vehicleType missing = "Book Any": whichever free cab is nearest.
+      matched = nearbyCabs(src0, { vehicleType: req.body.match.vehicleType || null, pet: !!req.body.pet, riderId: req.user.id })[0];
+      if (!matched) throw httpError(409, req.body.match.vehicleType ? 'No cab of that type is free near you right now' : 'No cab is free near you right now');
       extra = { driver: matched.d, pickupKm: (await pickupLeg(matched, src0)).km };
     }
     const q = await buildQuote(req.body, req.user, extra);
@@ -954,7 +955,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v6.db'), 
       req.body.payTiming === 'start' ? 'start' : 'end', q.route.polyline || null,
     );
     const tripId = Number(r.lastInsertRowid);
-    if (matched) db.prepare('UPDATE trips SET match_mode = 1, tried = ?, pickup_km = ?, offered_at = ? WHERE id = ?').run(JSON.stringify([q.d.user_id]), extra.pickupKm, now(), tripId);
+    if (matched) db.prepare('UPDATE trips SET match_mode = 1, match_any = ?, tried = ?, pickup_km = ?, offered_at = ? WHERE id = ?').run(req.body.match.vehicleType ? 0 : 1, JSON.stringify([q.d.user_id]), extra.pickupKm, now(), tripId);
     const ins = db.prepare('INSERT OR IGNORE INTO trip_tolls (trip_id, toll_id) VALUES (?, ?)');
     for (const t of q.routeTolls) ins.run(tripId, t.id);
     notifyTrip({ id: tripId });

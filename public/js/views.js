@@ -409,7 +409,7 @@ function tripMapHtml(t) {
       <button><span class="dotd"></span><span class="t">${esc(t.dst.name)}</span>${pinTag(t.dst)}</button></div>
       ${['accepted', 'started'].includes(t.status) ? `<p class="muted small" style="margin:8px 0 0">${ic('target')} Cab is at <span class="digipin" id="livepin">${esc((t.last && t.last.digipin) || 'waiting for GPS…')}</span></p>` : ''}</div>`;
 }
-function mountTripMap(t) { const el = $('#tmap'); if (el) S.map = makeMap(el, { src: t.src, dst: t.dst, last: t.last, polyline: t.routePolyline }); }
+function mountTripMap(t) { const el = $('#tmap'); if (el) { S.map = makeMap(el, { src: t.src, dst: t.dst, last: t.last, polyline: t.routePolyline }); if (S.map) S.map.setHexGrid(t.src, []); } }
 
 function commsBlock(t) {
   if (!['accepted', 'started'].includes(t.status) && !(t.status === 'completed' && !t.paidAt)) return '';

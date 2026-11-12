@@ -1,6 +1,6 @@
 'use strict';
 
-// Demo data for testing: 4 drivers, 4 customers and 15 trips around Lucknow in every
+// Demo data for testing: 9 drivers, 4 customers and 15 trips around Lucknow in every
 // state (completed, cancelled by either side, declined, waiting, in progress), with
 // ratings, wallet history, a toll, a guest booking and a privacy request.
 // Load it from Admin → Demo data, or start the server with OLUB_DEMO=1.
@@ -26,6 +26,11 @@ const DRIVERS = [
   { key: 'ramesh', phone: '9000000101', name: 'Ramesh Yadav', gender: 'male', dob: '1984-03-12', vn: 'UP32AB1234', type: 'sedan', model: 'Swift Dzire', cond: 'good', issued: '2008-06-01', status: 'verified', base: 212, topup: 1500, at: 'hazratganj', online: 1, prefs: { noSmoking: true, noAlcohol: true, petsOk: true, petCharge: 50 }, color: '#0f7b4a' },
   { key: 'imran', phone: '9000000102', name: 'Imran Khan', gender: 'male', dob: '1991-11-02', vn: 'UP32CD5678', type: 'auto', model: 'Bajaj RE', cond: 'average', issued: '2014-02-20', status: 'verified', base: 64, topup: 400, at: 'charbagh', online: 1, prefs: { noSmoking: true, noTobacco: true }, color: '#b86e00' },
   { key: 'sunita', phone: '9000000103', name: 'Sunita Verma', gender: 'female', dob: '1989-07-25', vn: 'UP32EF9012', type: 'hatchback', model: 'WagonR', cond: 'excellent', issued: '2019-09-10', status: 'submitted', base: 0, topup: 300, at: 'gomti', online: 1, prefs: { noSmoking: true, noAlcohol: true, noFood: true, petsOk: false }, color: '#7a3fb0' },
+  { key: 'amit', phone: '9000000105', name: 'Amit Tiwari', gender: 'male', dob: '1997-04-21', vn: 'UP32JK1111', type: 'bike', model: 'Splendor', cond: 'good', issued: '2017-08-01', status: 'verified', base: 31, topup: 300, at: 'hazratganj', off: [0.007, -0.006], online: 1, prefs: {}, color: '#00838f' },
+  { key: 'salim', phone: '9000000106', name: 'Salim Ansari', gender: 'male', dob: '1986-10-05', vn: 'UP32LM2222', type: 'auto', model: 'Piaggio Ape', cond: 'good', issued: '2010-01-12', status: 'verified', base: 120, topup: 300, at: 'hazratganj', off: [-0.009, 0.008], online: 1, prefs: { noSmoking: true }, color: '#6d4c41' },
+  { key: 'deepak', phone: '9000000107', name: 'Deepak Mishra', gender: 'male', dob: '1982-06-17', vn: 'UP32NP3333', type: 'sedan', model: 'Honda Amaze', cond: 'excellent', issued: '2005-11-30', status: 'verified', base: 340, topup: 500, at: 'kgmu', off: [0, 0], online: 1, prefs: { noSmoking: true, noAlcohol: true, petsOk: true, petCharge: 60 }, color: '#283593' },
+  { key: 'neha', phone: '9000000108', name: 'Neha Srivastava', gender: 'female', dob: '1993-02-08', vn: 'UP32QR4444', type: 'hatchback', model: 'Swift', cond: 'good', issued: '2016-05-19', status: 'verified', base: 77, topup: 300, at: 'charbagh', off: [0.005, 0.012], online: 1, prefs: { noSmoking: true, noAlcohol: true }, color: '#ad1457' },
+  { key: 'vikram', phone: '9000000109', name: 'Vikram Chauhan', gender: 'male', dob: '1980-12-25', vn: 'UP32ST5555', type: 'suv', model: 'Innova', cond: 'good', issued: '2003-03-03', status: 'verified', base: 510, topup: 500, at: 'gomti', off: [-0.012, -0.015], online: 1, prefs: { noAlcohol: true, petsOk: true, petCharge: 100 }, color: '#2e7d32' },
   { key: 'gurpreet', phone: '9000000104', name: 'Gurpreet Singh', gender: 'male', dob: '1978-01-30', vn: 'UP32GH3456', type: 'suv', model: 'Ertiga', cond: 'good', issued: '2001-04-15', status: 'verified', base: 18, topup: 130, at: 'alambagh', online: 0, prefs: { noAlcohol: true, petsOk: true, petCharge: 80 }, color: '#1f5fbf' },
 ];
 const RIDERS = [
@@ -102,7 +107,7 @@ module.exports = function seedDemo({ db, C, now, legal, getRates, newPublicId, f
       VALUES (?, ?, ?, ?, ?, 'UP', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`).run(
       id, d.vn, d.type, d.model, d.cond, `UP32${d.issued.slice(0, 4)}00${id}1234`, d.issued, `RC${d.vn}`, `XXXX-XXXX-${1000 + id}`, insuranceTill,
       encrypt(JSON.stringify(docs)), JSON.stringify({ noSmoking: false, noAlcohol: false, noTobacco: false, noFood: false, petsOk: false, petCharge: 0, ...d.prefs }),
-      d.status, d.status === 'verified' ? 'admin' : null, d.online, d.base, `UP/CC/2025/${100 + id}`, pos[1] + 0.002, pos[2] - 0.002, t0);
+      d.status, d.status === 'verified' ? 'admin' : null, d.online, d.base, `UP/CC/2025/${100 + id}`, pos[1] + (d.off ? d.off[0] : 0.002), pos[2] + (d.off ? d.off[1] : -0.002), t0);
     if (d.online) db.prepare('INSERT INTO duty_sessions (driver_id, started_at) VALUES (?, ?)').run(id, t0 - 2 * 3600e3);
   }
   void today;
@@ -197,7 +202,7 @@ module.exports = function seedDemo({ db, C, now, legal, getRates, newPublicId, f
     seeded: true,
     message: `Loaded ${DRIVERS.length} drivers, ${RIDERS.length} customers and ${TRIPS.length} trips around Lucknow.`,
     logins: {
-      drivers: DRIVERS.map((d) => ({ name: d.name, phone: d.phone, vehicle: d.vn, type: d.type, note: { ramesh: 'on a ride right now', imran: 'has a ride request waiting', sunita: 'new, awaiting verification', gurpreet: 'wallet below ₹100, cannot go online' }[d.key] })),
+      drivers: DRIVERS.map((d) => ({ name: d.name, phone: d.phone, vehicle: d.vn, type: d.type, note: { ramesh: 'on a ride right now', imran: 'has a ride request waiting', sunita: 'new, awaiting verification', gurpreet: 'wallet below ₹100, cannot go online' }[d.key] || 'free, waiting for customers' })),
       customers: RIDERS.map((r) => ({ name: r.name, phone: r.phone, note: { priya: 'most trips; open privacy complaint', arjun: 'waiting for a driver to accept', fatima: 'in a ride right now', rohan: 'paid an earlier cancellation fee with his last ride' }[r.key] })),
     },
   };

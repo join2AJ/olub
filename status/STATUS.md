@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **12 Nov 2026, 16:04 IST**
+Last updated: **12 Nov 2026, 22:35 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 86 complete · 10 in progress · 6 planned · 10 need you
+**Totals:** 89 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -162,9 +162,13 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.3 | New UI: theme, animation, icons | ✅ Complete | 12 Nov 2026, 08:33 | Map-first, number-plate input, dark mode |
 | 10.4 | This status table in the repo | ✅ Complete | 12 Nov 2026, 08:33 | |
 | 10.5 | Uber-style map | ✅ Complete | 12 Nov 2026, 16:04 | Full-width grey map, black road line, cabs around you, hexagon search area |
+| 10.9 | Hexagon grid visible on the map throughout | ✅ Complete | 12 Nov 2026, 22:35 | Covers whatever part of the map is on screen, on the home and ride maps; redraws as you move or zoom |
+| 10.10 | Animation on the map | ✅ Complete | 12 Nov 2026, 22:35 | A wave runs outward through the hexagons from the pickup; cells with a free cab glow; cars drop in and idle |
+| 10.11 | Map styled like the Ola screenshot | 🟡 In progress | 12 Nov 2026, 22:35 | Light lavender-grey look, cars seen from above, name pills on pickup and drop. Built on free OpenStreetMap tiles; the exact Ola / Google look needs their paid map tiles |
+| 10.12 | "Book Any": ask nearby drivers of any type, nearest first | ✅ Complete | 12 Nov 2026, 22:35 | Shows the price range, minutes away and drop time, like Ola's card |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
-| 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 4 drivers, 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |
+| 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |
 
 ## 11. Planned next
 

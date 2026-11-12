@@ -289,3 +289,29 @@ table.rates { width: 100%; border-collapse: collapse; font-size: 14px; } table.r
 /* quiet, Uber-like basemap from plain OpenStreetMap tiles */
 .leaflet-tile-pane { filter: grayscale(.92) brightness(1.07) contrast(.9); }
 @media (prefers-color-scheme: dark) { .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(.85) brightness(.85) contrast(.95); } }
+
+/* ---------- v0.6: Ola-style map, always-on animated hexagons, top-view cars, map pills ---------- */
+.leaflet-tile-pane { filter: grayscale(.5) sepia(.18) hue-rotate(200deg) saturate(1.2) brightness(1.13) contrast(.86); }
+.leaflet-container { background: #eceaf6; }
+@media (prefers-color-scheme: dark) { .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.5) brightness(.85) contrast(.95); } .leaflet-container { background: #14181a; } }
+.hexcell { animation: hexwave 3.2s ease-in-out infinite; }
+.hexcell.has { animation: hexhas 1.6s ease-in-out infinite; }
+.hexcell.centre { stroke-width: 2.4px; stroke-opacity: .9; }
+@keyframes hexwave { 0%, 100% { fill-opacity: .015; stroke-opacity: .22; } 50% { fill-opacity: .1; stroke-opacity: .55; } }
+@keyframes hexhas { 0%, 100% { fill-opacity: .22; } 50% { fill-opacity: .42; } }
+.cabtop { width: 36px; height: 36px; display: grid; place-items: center; transform: rotate(var(--turn)); filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); animation: cabin .6s var(--ease) both, cabidle 4s ease-in-out infinite .6s; color: #111; }
+.cabtop svg.i { width: 22px; height: 22px; background: #fff; border-radius: 50%; padding: 3px; }
+@keyframes cabin { from { opacity: 0; transform: rotate(var(--turn)) scale(.3); } }
+@keyframes cabidle { 0%, 100% { transform: rotate(var(--turn)) translateY(0); } 50% { transform: rotate(var(--turn)) translateY(-3px); } }
+.mappill.leaflet-tooltip { background: #fff; color: #14201b; border: 0; border-radius: 99px; padding: 7px 12px; font: 600 13px system-ui, sans-serif; box-shadow: 0 3px 12px rgba(0,0,0,.2); white-space: nowrap; opacity: 1 !important; }
+.mappill.leaflet-tooltip::before { display: none; }
+.mappill i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; vertical-align: -1px; }
+.mappill i.pp { background: #22b455; box-shadow: 0 0 0 3px #22b45533; } .mappill i.pd { background: #d62839; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }
+.bookany { border: 2px solid var(--brand); border-radius: 18px; padding: 14px; background: linear-gradient(135deg, var(--soft), var(--card)); display: flex; gap: 12px; align-items: center; margin: 10px 0 4px; }
+.bookany .cars { width: 62px; height: 46px; position: relative; flex: 0 0 auto; }
+.bookany .cars svg { position: absolute; transform: rotate(90deg); } .bookany .cars svg:first-child { left: 2px; top: -6px; opacity: .55; } .bookany .cars svg:last-child { left: 22px; top: 4px; }
+.fastest { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: #1d5fd1; border: 1.5px solid #9dbcf2; background: #eef4ff; border-radius: 99px; padding: 2px 8px; vertical-align: 2px; }
+.fastest svg.i { width: 12px; height: 12px; }
+.btn.dark { background: #16181c; box-shadow: 0 8px 20px rgba(0,0,0,.28); font-size: 17px; padding: 17px 18px; border-radius: 16px; }
+.searching { position: relative; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin: 10px 0; } .searching::after { content: ""; position: absolute; inset: 0; width: 35%; background: var(--brand); border-radius: 2px; animation: sweep 1.4s ease-in-out infinite; }
+@keyframes sweep { from { transform: translateX(-110%); } to { transform: translateX(320%); } }

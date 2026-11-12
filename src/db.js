@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS trips (
   sos_at INTEGER,
   route_poly TEXT,                              -- road path (encoded polyline)
   match_mode INTEGER NOT NULL DEFAULT 0,        -- 1 = Olub found the cab (nearest first)
+  match_any INTEGER NOT NULL DEFAULT 0,         -- 1 = "Book Any": the nearest cab of any type
   tried TEXT, pickup_km REAL NOT NULL DEFAULT 0, offered_at INTEGER,
   pickup_dist_start REAL, pickup_dist_last REAL,   -- driver's distance to the pickup: at accept / latest
   cancel_by TEXT, cancel_reason TEXT, cancel_fee REAL, cancel_charged TEXT,   -- who cancelled, why, fee, who paid

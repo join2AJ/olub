@@ -56,7 +56,7 @@ To try it: open two browser windows (or two phones). Sign up as a driver in one,
 
 ## Demo data
 
-Admin → **Demo data** → **Load demo data** adds 4 drivers, 4 customers and 15 trips around Lucknow: completed, cancelled by either side, declined, one waiting for a driver and one in progress, with ratings, wallet history, invoices, a toll and a guest booking. Log out and sign in with any of these numbers (the code shows on screen):
+Admin → **Demo data** → **Load demo data** adds 9 drivers, 4 customers and 15 trips around Lucknow: completed, cancelled by either side, declined, one waiting for a driver and one in progress, with ratings, wallet history, invoices, a toll and a guest booking. Log out and sign in with any of these numbers (the code shows on screen):
 
 | Role | Name | Mobile | What to look at |
 |---|---|---|---|
@@ -64,6 +64,7 @@ Admin → **Demo data** → **Load demo data** adds 4 drivers, 4 customers and 1
 | Driver | Imran Khan (auto) | 9000000102 | A ride request waiting to accept or decline |
 | Driver | Sunita Verma (hatchback) | 9000000103 | New, awaiting verification; free to be matched |
 | Driver | Gurpreet Singh (SUV) | 9000000104 | Wallet below ₹100, cannot go online |
+| Driver | Amit (bike), Salim (auto), Deepak (sedan), Neha (hatchback), Vikram (SUV) | 9000000105 – 9000000109 | Free and online near Hazratganj, so "Cabs near you" and "Book Any" have cabs to find |
 | Customer | Priya Sharma | 9000000201 | Most trips; an open privacy complaint |
 | Customer | Arjun Mehta | 9000000202 | Waiting for a driver to accept; a guest booking |
 | Customer | Fatima Ali | 9000000203 | In a ride right now (tracking, SOS) |
@@ -73,7 +74,7 @@ Admin → **Demo data** → **Load demo data** adds 4 drivers, 4 customers and 1
 
 **The cab is in front of you.** Scan its QR or type its number. No waiting, and nothing is charged for the cab coming to you.
 
-**No cab in sight.** Olub searches around the pickup in hexagons, ring by ring (about 1 km per ring, up to about 12 km), and shows the nearest free cab of each type with its fare. The nearest driver is asked first; if they decline or do not answer in 45 seconds the next nearest is asked. The fare covers **the cab's distance to you plus your trip**, both at that vehicle's per-km rate, and the Olub fee is based on the total: a cab 10 km away for a 1 km trip is 11 km, so the fee is ₹15.
+**No cab in sight.** Olub searches around the pickup in hexagons, ring by ring (about 1 km per ring, up to about 12 km), and shows the nearest free cab of each type with its fare. The nearest driver is asked first; if they decline or do not answer in 45 seconds the next nearest is asked. **Book Any** asks the nearest cab whatever its type. The fare covers **the cab's distance to you plus your trip**, both at that vehicle's per-km rate, and the Olub fee is based on the total: a cab 10 km away for a 1 km trip is 11 km, so the fee is ₹15.
 
 ## How a ride works
 

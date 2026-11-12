@@ -2,6 +2,7 @@
 /* Role screens: customer booking and ride, driver home and ride, admin console. */
 
 const VEH_ICON = { bike: 'bolt', auto: 'car', hatchback: 'car', sedan: 'car', suv: 'car' };
+const CAR_ICON = '<svg viewBox="0 0 24 44" width="22" height="40"><rect x="2" y="2" width="20" height="40" rx="8" fill="#fff" stroke="#1b1f1d" stroke-width="1.6"/><rect x="5" y="9" width="14" height="8" rx="3" fill="#1b1f1d"/><rect x="5" y="28" width="14" height="6" rx="3" fill="#1b1f1d"/><rect x="3" y="19" width="18" height="3" fill="#22b455"/></svg>';
 
 // ======================= CUSTOMER =======================
 function renderRider(app) {
@@ -28,7 +29,9 @@ function renderRider(app) {
     <div id="est"></div><div id="quote"></div>`;
   S.map = makeMap($('#hmap'), { src: b.src, dst: b.dst, polyline: S.estimate && S.estimate.route.polyline });
   if (b.src) S.lastSeen = b.src;
-  if (S.nearby) { S.map.setHexes(S.nearby.hexes); S.map.setCabs(S.nearby.cabs); }
+  // The hexagon grid is always on the map, centred on the pickup; cells holding a free cab glow.
+  if (S.map && b.src) S.map.setHexGrid(b.src, S.nearby ? S.nearby.cabs : []);
+  if (S.nearby) S.map.setCabs(S.nearby.cabs);
   else if (b.src) api('GET', `/api/drivers/nearby?lat=${b.src.lat}&lng=${b.src.lng}`).then((cabs) => { if (S.map && !S.nearby) S.map.setCabs(cabs); }).catch(() => {});
   bindTodos(app);
   const setPoint = (k) => (p) => { b[k] = p; b.autoFailed = false; S.estimate = null; S.nearby = null; S.quote = null; render(); };
@@ -42,7 +45,7 @@ function renderRider(app) {
   const loadFares = async (scroll) => {
     const body = { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet };
     [S.estimate, S.nearby] = await Promise.all([api('POST', '/api/trips/estimate', body), api('POST', '/api/trips/nearby', body).catch(() => ({ options: [], hexes: [], cabs: [], searchedRings: 0 }))]);
-    if (S.map) { S.map.setHexes(S.nearby.hexes); S.map.setRoute(b.src, b.dst, S.estimate.route.polyline); S.map.setCabs(S.nearby.cabs); }
+    if (S.map) { S.map.setRoute(b.src, b.dst, S.estimate.route.polyline); S.map.setHexGrid(b.src, S.nearby.cabs); S.map.setCabs(S.nearby.cabs); }
     showEstimate(); if (scroll) $('#est').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   $('#see-fares').onclick = run(() => loadFares(true));
@@ -61,7 +64,8 @@ function guestBody() {
 // Olub finds the cab: confirm the vehicle type, then the nearest driver is asked.
 function matchSheet(o) {
   const b = S.booking; b.payTiming = b.payTiming || 'end';
-  const sh = sheet(`Request ${/^[aeiou]/i.test(o.label) ? 'an' : 'a'} ${o.label}`, `
+  const sh = sheet(o.any ? 'Book any nearby cab' : `Request ${/^[aeiou]/i.test(o.label) ? 'an' : 'a'} ${o.label}`, `
+    ${o.any ? `<p class="muted">We ask every free cab near you, nearest first, whatever the type. The first driver to accept comes to you. Expect ${o.lo === o.hi ? rs(o.lo) : `${rs(o.lo)} – ${rs(o.hi)}`} depending on which cab accepts. The nearest right now:</p>` : ''}
     <div class="between"><div><div class="bignum">${rs(o.riderPays)}</div><div class="muted small">incl. GST and ${rs(o.platformFee)} Olub fee</div></div>
       <div class="vi" style="width:56px;height:56px;border-radius:18px;background:var(--soft);color:var(--brand);display:grid;place-items:center">${ic(VEH_ICON[o.type])}</div></div>
     <table class="fare" style="margin-top:10px"><tr><td>${ic('car')} Cab comes to you</td><td>${o.pickupKm} km · ${o.awayMin} min</td></tr>
@@ -73,7 +77,7 @@ function matchSheet(o) {
     <button id="mgo" class="btn block">Find my cab</button>`);
   $$('#mpay button', sh.el).forEach((x) => { x.onclick = () => { b.payTiming = x.dataset.p; $$('#mpay button').forEach((y) => y.classList.toggle('on', y === x)); }; });
   $('#mgo', sh.el).onclick = run(async () => {
-    await api('POST', '/api/trips', { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming, match: { vehicleType: o.type } });
+    await api('POST', '/api/trips', { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming, match: o.any ? {} : { vehicleType: o.type } });
     sh.close(); S.quote = null; S.estimate = null; S.nearby = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
     await refreshTrip(); render(); window.scrollTo(0, 0);
   });
@@ -85,6 +89,11 @@ function showEstimate() {
   $('#est').innerHTML = `
     <div class="card"><div class="between"><h2 style="margin:0">Cabs near you</h2><span class="chip ${e.route.traffic === 'Light' ? '' : 'warn'}">${ic('clock')}${e.route.etaMin} min · ${esc(e.route.traffic)}</span></div>
       <p class="muted small" style="margin:4px 0 6px">${e.route.distanceKm} km ${e.route.source === 'estimate' ? '(estimated)' : 'by road'} · fares include the cab coming to you, GST and the Olub fee</p>
+      ${n.options.length ? (() => { const lo = Math.min(...n.options.map((o) => o.riderPays)), hi = Math.max(...n.options.map((o) => o.riderPays)); const fast = Math.min(...n.options.map((o) => o.awayMin));
+        const drop = new Date(Date.now() + (fast + e.route.etaMin) * 60000).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }); const range = lo === hi ? rs(lo) : `${rs(lo)} – ${rs(hi)}`;
+        return `<div class="bookany"><div class="cars">${CAR_ICON}${CAR_ICON}</div><div class="grow"><div class="between"><b style="font-size:18px">Book Any <span class="fastest">${ic('bolt')}Fastest</span></b><b>${range}</b></div>
+          <div class="muted small">${fast} min · Drop by ${drop}</div><div class="muted small">${n.options.map((o) => esc(o.label)).join(', ')}</div></div></div>
+          <button id="bookany" class="btn dark block" style="margin-top:8px">Book Any • ${range}</button><h3>Or choose a type</h3>`; })() : ''}
       ${n.options.map((o) => `<div class="opt"><div class="vi">${ic(VEH_ICON[o.type])}</div><div class="grow"><b>${esc(o.label)}</b> ${o.rating.count ? `<span class="stars small">${ic('star', 'fill')}${o.rating.average.toFixed(1)}</span>` : ''}
         <div class="away">${o.awayKm} km away · ${o.awayMin} min${o.count > 1 ? ` · ${o.count} nearby` : ''}</div></div>
         <div style="text-align:right"><b class="p">${rs(o.riderPays)}</b><br><button class="btn req" data-match="${o.type}">Request</button></div></div>`).join('')
@@ -100,6 +109,7 @@ function showEstimate() {
         <button id="find" class="btn">${ic('search')}</button></div></div>`;
   void byType;
   $$('[data-match]').forEach((x) => { x.onclick = () => matchSheet(n.options.find((o) => o.type === x.dataset.match)); });
+  if ($('#bookany')) $('#bookany').onclick = () => { const near = [...n.options].sort((p, q) => p.awayMin - q.awayMin)[0]; matchSheet({ ...near, any: true, lo: Math.min(...n.options.map((o) => o.riderPays)), hi: Math.max(...n.options.map((o) => o.riderPays)) }); };
   $$('#mode button').forEach((x) => { x.onclick = () => { b.mode = x.dataset.m; b.driver = ''; showEstimate(); }; });
   $('#scan').onclick = () => scanSheet((code) => { b.driver = code; getQuote(); });
   const go = run(async () => { b.driver = $('#drv').value; await getQuote(true); });
@@ -161,7 +171,7 @@ function payBlock(t, forDriver) {
 function renderRiderTrip(app, t) {
   const f = t.final || t.quote;
   const head = {
-    requested: t.matched ? ['Finding your cab…', `Asking the nearest driver, ${t.pickupKm} km away. If there is no answer in ${S.cfg.matchOfferSeconds} seconds we ask the next one.`] : ['Waiting for the driver to accept…', `Asking ${esc(t.driver.name)} (${esc(t.driver.vehicleNumber)})`],
+    requested: t.matched ? ['Finding your cab…', `Asking the nearest ${t.matchAny ? 'cab' : esc(t.driver.vehicleLabel.toLowerCase())}, ${t.pickupKm} km away. If there is no answer in ${S.cfg.matchOfferSeconds} seconds we ask the next one.`] : ['Waiting for the driver to accept…', `Asking ${esc(t.driver.name)} (${esc(t.driver.vehicleNumber)})`],
     accepted: ['Driver accepted', 'Get in, then tell the driver this code.'],
     started: ['On the way', t.lateMin ? `Running ${t.lateMin} min late` : `Reaching in about ${Math.max(1, Math.round((t.expectedEndAt - Date.now()) / 60000))} min`],
     completed: [t.paidAt ? 'You have arrived' : 'You have arrived — please pay', `${esc(t.dst.name)}`],
@@ -169,7 +179,7 @@ function renderRiderTrip(app, t) {
   app.innerHTML = `
     ${t.status === 'completed' ? '' : tripMapHtml(t)}
     <div class="card">${steps(t.status)}
-      ${t.status === 'requested' ? `<div class="radar">${ic('car')}</div>` : ''}
+      ${t.status === 'requested' ? `<div class="radar">${ic('car')}</div><div class="searching"></div>` : ''}
       ${t.status === 'completed' ? '<div class="success"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.500 4.500L19 7.500"/></svg></div>' : ''}
       <h2 class="center">${head[0]}</h2><p class="muted center">${head[1]}</p>
       ${t.guest ? `<p class="center"><span class="chip">${ic('users')}For ${esc(t.guest.name)} · ${esc(t.guest.publicId)}</span></p>` : ''}
@@ -403,7 +413,7 @@ const ADMIN = {
     const note = { 9000000101: 'on a ride right now', 9000000102: 'has a ride request waiting', 9000000103: 'new, awaiting verification', 9000000104: 'wallet below ₹100',
       9000000201: 'most trips; open privacy complaint', 9000000202: 'waiting for a driver to accept', 9000000203: 'in a ride right now', 9000000204: 'had a cancellation fee' };
     pane.innerHTML = `<div class="card"><h2>Demo data</h2>
-      <p class="muted">Loads 4 drivers, 4 customers and 15 trips around Lucknow: completed, cancelled by either side, declined, one waiting for a driver and one in progress — with ratings, wallet history, invoices, a toll and a guest booking.</p>
+      <p class="muted">Loads 9 drivers, 4 customers and 15 trips around Lucknow: completed, cancelled by either side, declined, one waiting for a driver and one in progress — with ratings, wallet history, invoices, a toll and a guest booking.</p>
       ${d.loaded ? `<p class="chip">${ic('check')}Demo data is loaded</p>` : `<button id="dload" class="btn block">${ic('download')}Load demo data</button>`}</div>
       ${d.loaded ? `<div class="card"><h2>Log in as…</h2><p class="muted small">Log out, enter one of these numbers, and use the code shown on screen.</p>
         <table class="logins">${d.logins.map((u) => `<tr><td>${ic(u.role === 'driver' ? 'car' : 'user')}</td><td><b>${esc(u.name)}</b><div class="muted small">${esc(note[u.phone] || '')}</div></td><td style="text-align:right;font-family:ui-monospace,monospace"><b>${esc(u.phone)}</b><div class="muted small">${esc(u.publicId)}</div></td></tr>`).join('')}</table></div>` : ''}`;
