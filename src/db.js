@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
   gender TEXT,                                  -- male | female | other
   trusted_name TEXT, trusted_phone TEXT, trusted_relation TEXT,
   status TEXT NOT NULL DEFAULT 'active',        -- active | erased
-  cancel_dues REAL NOT NULL DEFAULT 0,          -- unpaid cancellation fees, added to the next ride
+  cancel_dues REAL NOT NULL DEFAULT 0,
+  photo TEXT,                                   -- small profile photo (data URL)          -- unpaid cancellation fees, added to the next ride
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS monthly_charges (
@@ -134,6 +135,7 @@ CREATE TABLE IF NOT EXISTS trips (
   safety TEXT,                                  -- JSON {score, overspeed, harshBrakes, maxKmph}
   off_route_since INTEGER, off_route_alerted INTEGER NOT NULL DEFAULT 0,
   sos_at INTEGER,
+  route_poly TEXT,                              -- road path (encoded polyline)
   pickup_dist_start REAL, pickup_dist_last REAL,   -- driver's distance to the pickup: at accept / latest
   cancel_by TEXT, cancel_reason TEXT, cancel_fee REAL, cancel_charged TEXT,   -- who cancelled, why, fee, who paid
   cancelled_at INTEGER,
@@ -190,7 +192,7 @@ CREATE TABLE IF NOT EXISTS dsr_requests (
   status TEXT NOT NULL DEFAULT 'received',      -- received | completed | rejected | withdrawn
   created_at INTEGER NOT NULL,
   process_after INTEGER NOT NULL, internal_due_at INTEGER NOT NULL, public_due_at INTEGER NOT NULL,
-  completed_at INTEGER, handled_by TEXT, response TEXT, export TEXT
+  completed_at INTEGER, handled_by TEXT, response TEXT, export TEXT, field TEXT
 );
 -- Every SMS / email Olub should send. A gateway worker delivers these in production.
 CREATE TABLE IF NOT EXISTS outbox (

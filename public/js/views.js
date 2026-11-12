@@ -213,7 +213,7 @@ function legalSheet(keys) {
 
 // ---------------- profile to-dos ----------------
 const TODO = {
-  terms: ['file', 'Accept the latest terms'], email: ['mail', 'Confirm your email'], personal: ['id', 'Add date of birth and sex'],
+  terms: ['file', 'Accept the latest terms'], email: ['mail', 'Confirm your email'], personal: ['id', 'Add personal details'],
   trusted: ['heart', 'Add a trusted contact'], vehicle: ['car', 'Add vehicle and documents'],
 };
 function todoCard() {
@@ -247,14 +247,25 @@ function emailSheet() {
   });
 }
 function personalSheet() {
-  const sh = sheet('About you', `<label class="f">Name</label><input id="pn" value="${esc(S.me.name || '')}">
+  let photo;  // undefined = unchanged
+  const pic = () => (photo !== undefined ? photo : S.me.photo);
+  const sh = sheet('Personal details', `
+    <div class="row" style="margin-bottom:6px"><div id="pp-box">${pic() ? `<img class="avatar" src="${pic()}" alt="" style="width:76px;height:76px">` : `<div class="avatar" style="width:76px;height:76px">${ic('user')}</div>`}</div>
+      <div class="grow"><label class="btn small ghost" style="margin:0">${ic('camera')}${S.me.photo ? 'Change photo' : 'Add your photo'}<input id="pp" type="file" accept="image/*" hidden></label>
+      <p class="muted small" style="margin:6px 0 0">${S.me.role === 'driver' ? 'Customers see this photo.' : 'Your driver sees this so they can recognise you.'}</p></div></div>
+    <label class="f">Name</label><input id="pn" value="${esc(S.me.name || '')}">
     <label class="f">Date of birth</label><input id="pd" type="date" value="${esc(S.me.dob || '')}" max="${new Date().toISOString().slice(0, 10)}">
     <label class="f">Sex</label><div class="seg" id="pg">${['male', 'female', 'other'].map((g) => `<button data-g="${g}" class="${S.me.gender === g ? 'on' : ''}">${g[0].toUpperCase() + g.slice(1)}</button>`).join('')}</div>
     <p class="muted small" style="margin-top:10px">You must be ${S.cfg.minAge} or older. ${S.me.role === 'driver' ? 'Customers see your age and sex on your driver card.' : ''}</p>
     <button id="pgo" class="btn block">Save</button>`);
   let g = S.me.gender;
   $$('#pg button', sh.el).forEach((b) => { b.onclick = () => { g = b.dataset.g; $$('#pg button').forEach((x) => x.classList.toggle('on', x === b)); }; });
-  $('#pgo', sh.el).onclick = run(async () => saved(await api('PATCH', '/api/me', { name: $('#pn').value, dob: $('#pd').value, gender: g }), sh, 'Saved'));
+  $('#pp', sh.el).onchange = run(async (e) => {
+    if (!e.target.files[0]) return;
+    photo = await readImage(e.target.files[0], 360);
+    $('#pp-box').innerHTML = `<img class="avatar" src="${photo}" alt="" style="width:76px;height:76px">`;
+  });
+  $('#pgo', sh.el).onclick = run(async () => saved(await api('PATCH', '/api/me', { name: $('#pn').value, dob: $('#pd').value, gender: g, ...(photo !== undefined && { photo }) }), sh, 'Saved'));
 }
 function trustedSheet() {
   const t = S.me.trusted || {};
@@ -294,7 +305,7 @@ function placePicker(label, onPick) {
     clearTimeout(timer);
     const q = e.target.value.trim();
     if (Digipin.looksLike(q)) { const c = Digipin.decode(q); return list([{ name: `DIGIPIN ${Digipin.encode(c.lat, c.lng)}`, lat: c.lat, lng: c.lng }]); }
-    timer = setTimeout(async () => { try { list(await api('GET', `/api/places/search?q=${encodeURIComponent(q)}`)); } catch { /* keep the old list */ } }, 250);
+    timer = setTimeout(async () => { try { const near = S.booking.src || S.lastSeen; list(await api('GET', `/api/places/search?q=${encodeURIComponent(q)}${near ? `&lat=${near.lat}&lng=${near.lng}` : ''}`)); } catch { /* keep the old list */ } }, 250);
   };
   $('#p-gps', sh.el).onclick = run(async () => pick(await myLocation()));
   $('#p-map', sh.el).onclick = () => {
@@ -310,7 +321,7 @@ function placePicker(label, onPick) {
     el.scrollIntoView({ behavior: 'smooth' });
   };
 }
-const pointBody = (p) => (p.placeId ? { placeId: p.placeId } : { lat: p.lat, lng: p.lng, name: p.name });
+const pointBody = (p) => (p.placeId ? { placeId: p.placeId } : { lat: p.lat, lng: p.lng, name: p.name, state: p.state });
 
 // ---------------- QR: show (driver) and scan (rider) ----------------
 function qrSvg(text) {
@@ -384,7 +395,7 @@ function tripMapHtml(t) {
       <button><span class="dotd"></span><span class="t">${esc(t.dst.name)}</span>${pinTag(t.dst)}</button></div>
       ${['accepted', 'started'].includes(t.status) ? `<p class="muted small" style="margin:8px 0 0">${ic('target')} Cab is at <span class="digipin" id="livepin">${esc((t.last && t.last.digipin) || 'waiting for GPS…')}</span></p>` : ''}</div>`;
 }
-function mountTripMap(t) { const el = $('#tmap'); if (el) S.map = makeMap(el, { src: t.src, dst: t.dst, last: t.last }); }
+function mountTripMap(t) { const el = $('#tmap'); if (el) S.map = makeMap(el, { src: t.src, dst: t.dst, last: t.last, polyline: t.routePolyline }); }
 
 function commsBlock(t) {
   if (!['accepted', 'started'].includes(t.status) && !(t.status === 'completed' && !t.paidAt)) return '';
@@ -561,14 +572,14 @@ function renderProfile(app) {
   const me = S.me;
   if (me.role === 'driver' && S.sub === 'vehicle') return renderVehicle(app);
   app.innerHTML = `
-    <div class="idcard"><div class="muted small" style="color:#ffffffaa">${{ rider: 'OLUB CUSTOMER', driver: 'OLUB DRIVER', admin: 'OLUB ADMIN' }[me.role]}</div>
+    <div class="idcard">${me.photo ? `<img src="${me.photo}" alt="" class="avatar" style="float:right;position:relative;z-index:1;width:72px;height:72px;border:2px solid #ffffff55">` : ''}<div class="muted small" style="color:#ffffffaa">${{ rider: 'OLUB CUSTOMER', driver: 'OLUB DRIVER', admin: 'OLUB ADMIN' }[me.role]}</div>
       <div class="pid">${esc(me.publicId)}</div><div style="font-size:20px;font-weight:800;margin-top:10px">${esc(me.name)}</div>
       <div class="muted small" style="color:#ffffffcc">${[me.age && `${me.age} yrs`, me.gender, me.rating.count && `★ ${me.rating.average}`].filter(Boolean).join(' · ')}</div>
       <div class="chips" style="margin-top:12px;position:relative;z-index:1"><span class="chip">${ic('check')}Mobile confirmed</span>
         <span class="chip ${me.emailVerified ? '' : 'warn'}">${ic(me.emailVerified ? 'check' : 'clock')}Email ${me.emailVerified ? 'confirmed' : 'not confirmed'}</span></div></div>
     ${todoCard()}
     <div class="card menu">
-      <button data-open="personal">${ic('id')}<span class="grow">About you<div class="muted small">${esc(me.dob || 'Date of birth, sex')}</div></span>${ic('right')}</button>
+      <button data-open="personal">${ic('id')}<span class="grow">Personal details<div class="muted small">${esc([me.dob, me.gender].filter(Boolean).join(' · ') || 'Photo, date of birth, sex')}</div></span>${ic('right')}</button>
       <button data-open="email">${ic('mail')}<span class="grow">Email<div class="muted small">${esc(me.email || 'Not added')}</div></span>${ic('right')}</button>
       ${me.role === 'rider' ? `<button data-open="trusted">${ic('heart')}<span class="grow">Trusted contact<div class="muted small">${me.trusted ? `${esc(me.trusted.name)} · ${esc(me.trusted.phone)}` : 'Required for rides'}</div></span>${ic('right')}</button>
         <button id="m-guests">${ic('users')}<span class="grow">People I book for</span>${ic('right')}</button>` : ''}
@@ -602,16 +613,45 @@ function qrSheet() {
 
 async function privacySheet() {
   const list = await api('GET', '/api/privacy/requests');
+  const fields = S.cfg.dsrCorrectionFields;
   const sh = sheet('Privacy & my data', `<p class="muted">You can get a copy of your data, correct it, delete your account, withdraw consent or complain. We answer within ${S.cfg.dsrPublicDays - 2}–${S.cfg.dsrPublicDays} days.</p>
     ${S.me.emailVerified ? '' : '<div class="card warn">Confirm your email first — requests are accepted only from verified accounts.</div>'}
     <label class="f">What do you need?</label><select id="dt">${Object.entries(S.cfg.dsrTypes).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select>
-    <label class="f">Details (optional)</label><textarea id="dd" maxlength="1000"></textarea>
+    <div id="corr" hidden><label class="f">What needs correcting?</label><select id="df">${Object.entries(fields).map(([k, f]) => `<option value="${k}">${esc(f.label)}</option>`).join('')}</select><div id="dv"></div></div>
+    <div id="ddwrap"><label class="f" id="ddl">Details (optional)</label><textarea id="dd" maxlength="1000"></textarea></div>
     <button id="dgo" class="btn block">Send request</button>
     <h3>My requests</h3><div class="list">${list.map((r) => `<div><div class="between"><b>${esc(r.typeLabel)}</b><span class="chip ${r.status === 'completed' ? '' : r.status === 'received' ? 'warn' : 'grey'}">${esc(r.status)}</span></div>
       <div class="muted small">${esc(r.publicId)} · ${when(r.createdAt)}${r.status === 'received' ? ` · answer by ${new Date(r.answerBy).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}</div>
       ${r.response ? `<p class="small" style="margin:6px 0 0">${esc(r.response)}</p>` : ''}
       <div class="row" style="margin-top:6px">${r.hasExport ? `<button class="btn small ghost" data-dl="${r.id}">${ic('download')}Download my data</button>` : ''}${r.status === 'received' ? `<button class="btn small ghost" data-wd="${r.id}">Cancel request</button>` : ''}</div></div>`).join('') || '<p class="muted">No requests yet.</p>'}</div>`);
-  $('#dgo', sh.el).onclick = run(async () => { const r = await api('POST', '/api/privacy/requests', { type: $('#dt').value, details: $('#dd').value }); sh.close(); toast(`Request ${r.publicId} received`); privacySheet(); });
+  const me = S.me; const t = me.trusted || {};
+  // Each kind of correction asks only for what it needs.
+  const inputs = {
+    name: () => `<label class="f">Correct name</label><input id="cv" value="${esc(me.name || '')}">`,
+    dob: () => `<label class="f">Correct date of birth</label><input id="cv" type="date" value="${esc(me.dob || '')}" max="${new Date().toISOString().slice(0, 10)}">`,
+    gender: () => `<label class="f">Correct sex</label><select id="cv">${['male', 'female', 'other'].map((x) => `<option value="${x}" ${me.gender === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}</select>`,
+    trusted: () => `<label class="f">Trusted contact's name</label><input id="cv1" value="${esc(t.name || '')}"><label class="f">Their mobile number</label><input id="cv2" inputmode="numeric" maxlength="14" value="${esc(t.phone || '')}">`,
+  };
+  const sync = () => {
+    const corr = $('#dt').value === 'correction'; const f = $('#df').value; const mode = fields[f].mode;
+    $('#corr').hidden = !corr;
+    $('#dv').innerHTML = !corr ? '' : mode === 'auto' ? `${inputs[f]()}<p class="muted small" style="margin-top:8px">${ic('bolt')} Corrected straight away.</p>`
+      : mode === 'guide' ? `<p class="muted small" style="margin-top:8px">${ic('bolt')} We will tell you right away where to change this — it needs a quick check.</p>`
+      : `<p class="muted small" style="margin-top:8px">${ic('clock')} Our team will check this and answer you.</p>`;
+    $('#ddwrap').hidden = corr && mode !== 'manual';
+    $('#ddl').textContent = corr ? 'What is wrong, and what should it be?' : 'Details (optional)';
+  };
+  $('#dt', sh.el).onchange = sync; $('#df', sh.el).onchange = sync; sync();
+  $('#dgo', sh.el).onclick = run(async () => {
+    const body = { type: $('#dt').value, details: $('#dd').value };
+    if (body.type === 'correction') {
+      body.field = $('#df').value;
+      if (fields[body.field].mode === 'auto') body.value = body.field === 'trusted' ? { name: $('#cv1').value, phone: $('#cv2').value } : $('#cv').value;
+    }
+    const r = await api('POST', '/api/privacy/requests', body);
+    if (r.status === 'completed') S.me = await api('GET', '/api/me');
+    sh.close(); render(); toast(r.status === 'completed' ? (r.response || 'Done') : `Request ${r.publicId} received`); privacySheet();
+  });
   $$('[data-wd]', sh.el).forEach((b) => { b.onclick = run(async () => { await api('POST', `/api/privacy/requests/${b.dataset.wd}/withdraw`); sh.close(); privacySheet(); }); });
   $$('[data-dl]', sh.el).forEach((b) => { b.onclick = run(async () => {
     const data = await api('GET', `/api/privacy/requests/${b.dataset.dl}/export`);

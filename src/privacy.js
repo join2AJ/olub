@@ -37,7 +37,7 @@ function eraseUser(db, userId) {
     AND (status IN ('requested','accepted','started') OR (status = 'completed' AND paid_at IS NULL))`).get(userId, userId);
   if (active) return 'You have a trip in progress or awaiting payment. We will retry automatically.';
   db.prepare(`UPDATE users SET name = 'Deleted user', phone = ?, email = NULL, email_verified_at = NULL, phone_verified_at = NULL,
-    dob = NULL, gender = NULL, trusted_name = NULL, trusted_phone = NULL, trusted_relation = NULL, status = 'erased' WHERE id = ?`)
+    dob = NULL, gender = NULL, photo = NULL, trusted_name = NULL, trusted_phone = NULL, trusted_relation = NULL, status = 'erased' WHERE id = ?`)
     .run(`erased:${userId}`, userId);
   db.prepare(`UPDATE drivers SET vehicle_number = NULL, vehicle_model = NULL, license_no = NULL, license_issued_on = NULL, rc_no = NULL,
     kyc_id_no = NULL, insurance_valid_till = NULL, docs = NULL, prefs = NULL, status = 'incomplete', online = 0 WHERE user_id = ?`).run(userId);

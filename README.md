@@ -40,7 +40,8 @@ Open `http://localhost:3000` in a browser to use the same app without installing
 | Setting | What it does |
 |---|---|
 | `OLUB_ADMIN_PHONES` | Mobile numbers that are admins (default `9999999999`) |
-| `GOOGLE_MAPS_API_KEY` | Live traffic, road distance and address search. Without it the app estimates |
+| `GOOGLE_MAPS_API_KEY` | Live traffic and Google address search. Without it the app uses free OpenStreetMap road routes and search, and estimates traffic by time of day |
+| `OLUB_OSRM_URL`, `OLUB_PHOTON_URL` | Your own OpenStreetMap routing / search servers (default: the free public ones, which have no uptime promise). `OLUB_OSM=0` turns them off |
 | `OLUB_DATA_KEY` | 64 hex characters; encrypts KYC documents. Required in production |
 | `OLUB_PUBLIC_URL` | Public address, used in tracking links sent to trusted contacts |
 | `OLUB_DEV_OTP=0` | Stop showing login codes on screen (once SMS is connected) |
@@ -67,7 +68,7 @@ To try it: open two browser windows (or two phones). Sign up as a driver in one,
 
 **Customers**
 - QR / number-plate booking, fare before booking, pay at start or end
-- GPS and DIGIPIN locations, map pin, address search (with a maps key)
+- GPS and DIGIPIN locations, map pin, address search; the map shows the road path
 - Book for a guest; travel with a pet if the driver allows it
 - Mandatory trusted contact, live tracking link, SOS, late and off-route alarms
 - GST invoice, trip history, spending and GST summary
@@ -138,7 +139,8 @@ These are the open items that matter most. The full list is in [status/STATUS.md
 - **GST.** The app charges 5% on rides and remits it from the driver's wallet. Whether that applies to a flat-fee platform is not settled. Ask a CA; one setting turns it off.
 - **Authority requests are answered automatically on day 3** unless an admin refuses. An email code proves control of a mailbox, not legal authority. Have an admin read every letter. See [docs/compliance/regulatory.md](docs/compliance/regulatory.md).
 - **Unverified drivers can take rides** once documents are uploaded, because that is how a customer verifies them in person.
-- **Not connected yet:** SMS (login codes and safety alerts are queued, not sent), email, payments (wallet top-up is test mode), Google Maps (needs your key), a call relay server.
+- **Not connected yet:** SMS (login codes and safety alerts are queued, not sent), email, payments (wallet top-up is test mode), Google Maps live traffic (needs your key), a call relay server.
+- **Maps run on free public OpenStreetMap servers** (routing and search). They are fine for testing but can be slow or refuse heavy use. Before launch, add a Google key or host your own.
 
 ## Compliance
 

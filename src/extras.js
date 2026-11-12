@@ -27,7 +27,7 @@ module.exports = function registerExtras(x) {
     const calamity = !!x.calamityFor(src.state);
     return {
       src, dst,
-      route: { distanceKm: r2(r.distanceKm), etaMin: Math.round(r.etaMin), traffic: r.trafficLabel, source: r.source },
+      route: { distanceKm: r2(r.distanceKm), etaMin: Math.round(r.etaMin), traffic: r.trafficLabel, source: r.source, polyline: r.polyline },
       options: Object.entries(rates).map(([type, rate]) => {
         const f = calculateFare({
           distanceKm: r.distanceKm, vehicleType: type, rates: rate, condition: 'good', completedTrips: 10,

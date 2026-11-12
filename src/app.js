@@ -8,7 +8,7 @@ const C = require('./config');
 const { openDb } = require('./db');
 const { calculateFare, experienceTier, platformFeeFor } = require('./fare');
 const { haversineKm } = require('./geo');
-const { isValidPoint, pointToSegmentKm } = require('./geo');
+const { isValidPoint, pointToSegmentKm, decodePolyline, pointToPathKm } = require('./geo');
 const Digipin = require('../public/js/digipin.js');
 const registerExtras = require('./extras');
 const defaultMaps = require('./maps');
@@ -36,7 +36,7 @@ const text = (s, max = 300) => String(s || '').trim().slice(0, max) || null;
 const DOC_KEYS = ['license', 'rc', 'kyc', 'vehicle', 'selfie'];
 const ID_PREFIX = { rider: 'OLB-C', driver: 'OLB-D', admin: 'OLB-A' };
 
-function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), clock = Date.now, maps = defaultMaps } = {}) {
+function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), clock = Date.now, maps = defaultMaps } = {}) {
   const db = openDb(dbFile);
   const now = () => clock();
   const audit = createAudit(db, clock);
@@ -224,7 +224,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
       email: u.email, emailVerified: !!u.email_verified_at,
       dob: u.dob, age: ageFrom(u.dob), gender: u.gender,
       trusted: u.trusted_name ? { name: u.trusted_name, phone: u.trusted_phone, relation: u.trusted_relation } : null,
-      todo: todoFor(u), pendingConsents: pendingConsents(u), rating: ratingOf(u.id), cancelDues: u.cancel_dues,
+      todo: todoFor(u), pendingConsents: pendingConsents(u), rating: ratingOf(u.id), cancelDues: u.cancel_dues, photo: u.photo,
     };
     if (u.role === 'driver') {
       const d = getDriver(u.id);
@@ -257,7 +257,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
       petsOk: !!prefs.petsOk, petCharge: prefs.petsOk ? (prefs.petCharge || 0) : 0,
       licenseNo: mask(d.license_no), rcNo: d.rc_no,
       // Only what a rider needs to recognise the driver. KYC ID stays private.
-      photos: { selfie: docs.selfie || null, vehicle: docs.vehicle || null },
+      photos: { selfie: docs.selfie || u.photo || null, vehicle: docs.vehicle || null },
     };
     if (full) {
       Object.assign(out, {
@@ -460,7 +460,8 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
       tolls: tripTolls(trip).map((t) => T.publicToll(db, t, isRider ? undefined : trip.driver_id)),
       otp: isRider && ['requested', 'accepted'].includes(trip.status) ? trip.otp : undefined, // rider only
       driver: publicDriver(d),
-      rider: { publicId: rider.public_id, name: firstName(rider.name), rating: ratingOf(rider.id) },
+      rider: { publicId: rider.public_id, name: firstName(rider.name), rating: ratingOf(rider.id), photo: rider.photo },
+      routePolyline: trip.route_poly,
       guest: guest ? { publicId: guest.public_id, name: guest.name } : null,
       canVerifyDriver: isRider && d.status === 'submitted' && !trip.verify_discount &&
         ['accepted', 'started', 'completed'].includes(trip.status) && !trip.paid_at,
@@ -516,6 +517,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
     driverRules: C.DRIVER_RULES, maxPetCharge: C.MAX_PET_CHARGE, ratingCriteria: C.RATING_CRITERIA,
     overdue: { warn: C.OVERDUE_WARN_MIN, alert: C.OVERDUE_ALERT_MIN }, minAge: C.MIN_AGE,
     dsrTypes: C.DSR_TYPES, dsrPublicDays: C.DSR_PUBLIC_SLA_DAYS,
+    dsrCorrectionFields: Object.fromEntries(Object.entries(C.DSR_CORRECTION_FIELDS).map(([k, v]) => [k, { label: v.label, mode: v.mode }])),
     liveTraffic: !!C.GOOGLE_MAPS_API_KEY, legalVersion: legal.VERSION,
     gst: { ride: C.RIDE_GST_RATE, platformFee: C.PLATFORM_FEE_GST_RATE }, company: C.COMPANY,
     wallet: { min: C.WALLET_MIN_BALANCE, maxTopup: C.WALLET_MAX_TOPUP },
@@ -529,7 +531,8 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
     const q = String(req.query.q || '').trim().toLowerCase();
     const local = db.prepare('SELECT * FROM places').all().filter((p) => p.name.toLowerCase().includes(q))
       .map((p) => ({ placeId: p.id, name: p.name, lat: p.lat, lng: p.lng }));
-    return [...local, ...(q.length >= 3 ? await maps.searchPlaces(q) : [])];
+    const near = isValidPoint({ lat: Number(req.query.lat), lng: Number(req.query.lng) }) && req.query.lat ? { lat: Number(req.query.lat), lng: Number(req.query.lng) } : null;
+    return [...local, ...(q.length >= 3 ? await maps.searchPlaces(q, { near }) : [])];
   }));
 
   // Live tracking page for the trusted contact (no login; the link is the secret).
@@ -546,7 +549,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
       traveller: firstName(guest?.name || getUser(trip.rider_id).name),
       src: withPin({ name: trip.src_name, lat: trip.src_lat, lng: trip.src_lng }),
       dst: withPin({ name: trip.dst_name, lat: trip.dst_lat, lng: trip.dst_lng }),
-      offRoute: !!trip.off_route_alerted, sosAt: trip.sos_at,
+      offRoute: !!trip.off_route_alerted, sosAt: trip.sos_at, routePolyline: trip.route_poly,
       driver: { name: firstName(d.name), vehicleNumber: d.vehicleNumber, vehicleLabel: d.vehicleLabel, vehicleModel: d.vehicleModel, rating: d.rating, photo: d.photos.selfie },
       startedAt: trip.started_at, expectedEndAt: trip.expected_end_at, completedAt: trip.completed_at,
       lateMin: lateMinutes(trip), overdueLevel: trip.overdue_level,
@@ -610,9 +613,13 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
   // ================= my profile =================
   app.get('/api/me', auth, route((req) => meView(req.user)));
 
-  app.patch('/api/me', auth, route((req) => {
-    const b = req.body; const u = req.user;
+  /** Validate and save profile fields. Used by the profile screen and by automatic "correct my data" requests. */
+  function applyProfile(u, b) {
     const set = {};
+    if (b.photo !== undefined) {
+      if (b.photo && (!/^data:image\//.test(b.photo) || b.photo.length > 400_000)) throw httpError(400, 'Choose a smaller photo');
+      set.photo = b.photo || null;
+    }
     if (b.name !== undefined) { set.name = text(b.name, 60); if (!set.name) throw httpError(400, 'Name is required'); }
     if (b.dob !== undefined) {
       if (!isDate(b.dob)) throw httpError(400, 'Enter your date of birth');
@@ -632,7 +639,12 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
     }
     const keys = Object.keys(set);
     if (keys.length) db.prepare(`UPDATE users SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => set[k]), u.id);
-    return meView(getUser(u.id));
+    return keys;
+  }
+
+  app.patch('/api/me', auth, route((req) => {
+    applyProfile(req.user, req.body);
+    return meView(getUser(req.user.id));
   }));
 
   app.post('/api/me/consents', auth, route((req) => {
@@ -824,12 +836,12 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
     const q = await buildQuote(req.body, req.user);
     const guest = resolveGuest(req.body.guest, req.user);
     const r = db.prepare(`INSERT INTO trips (rider_id, driver_id, guest_id, src_name, src_lat, src_lng, dst_name, dst_lat, dst_lng,
-      state, distance_km, eta_min, free_flow_min, traffic_source, traffic_label, pet, quote, status, otp, track_token, created_at, pay_timing)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?)`).run(
+      state, distance_km, eta_min, free_flow_min, traffic_source, traffic_label, pet, quote, status, otp, track_token, created_at, pay_timing, route_poly)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, ?, ?, ?, ?)`).run(
       req.user.id, q.d.user_id, guest?.id ?? null, q.src.name, q.src.lat, q.src.lng, q.dst.name, q.dst.lat, q.dst.lng,
       q.state, q.quote.distanceKm, q.route.etaMin, q.route.freeFlowMin, q.route.source, q.route.trafficLabel, q.pet ? 1 : 0,
       JSON.stringify(q.quote), fourDigit(), crypto.randomBytes(16).toString('hex'), now(),
-      req.body.payTiming === 'start' ? 'start' : 'end',
+      req.body.payTiming === 'start' ? 'start' : 'end', q.route.polyline || null,
     );
     const tripId = Number(r.lastInsertRowid);
     const ins = db.prepare('INSERT OR IGNORE INTO trip_tolls (trip_id, toll_id) VALUES (?, ?)');
@@ -939,8 +951,10 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
       const kmph = Number.isFinite(Number(req.body.kmph)) && req.body.kmph != null ? Math.min(250, Math.max(0, Number(req.body.kmph))) : null;
       db.prepare('INSERT INTO trip_points (trip_id, lat, lng, ts, kmph) VALUES (?, ?, ?, ?, ?)').run(trip.id, p.lat, p.lng, now(), kmph);
       // Route watch: how far is the cab from the pickup→drop corridor?
-      const off = pointToSegmentKm(p, { lat: trip.src_lat, lng: trip.src_lng }, { lat: trip.dst_lat, lng: trip.dst_lng });
-      const allowed = Math.max(C.ROUTE_CORRIDOR_KM, trip.distance_km * C.ROUTE_CORRIDOR_SHARE);
+      // Measured from the road path when we have one, otherwise from the straight line.
+      const path = trip.route_poly ? decodePolyline(trip.route_poly) : null;
+      const off = path && path.length > 1 ? pointToPathKm(p, path) : pointToSegmentKm(p, { lat: trip.src_lat, lng: trip.src_lng }, { lat: trip.dst_lat, lng: trip.dst_lng });
+      const allowed = path ? C.ROUTE_CORRIDOR_KM : Math.max(C.ROUTE_CORRIDOR_KM, trip.distance_km * C.ROUTE_CORRIDOR_SHARE);
       if (off > allowed && !trip.off_route_since) db.prepare('UPDATE trips SET off_route_since = ? WHERE id = ?').run(now(), trip.id);
       if (off <= allowed && trip.off_route_since) db.prepare('UPDATE trips SET off_route_since = NULL, off_route_alerted = 0 WHERE id = ?').run(trip.id);
     }
@@ -1145,7 +1159,8 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
 
   // ================= privacy requests (DPDP / GDPR) =================
   const dsrView = (r, { admin = false } = {}) => ({
-    id: r.id, publicId: r.public_id, type: r.type, typeLabel: C.DSR_TYPES[r.type], details: r.details, status: r.status,
+    id: r.id, publicId: r.public_id, type: r.type, details: r.details, status: r.status,
+    typeLabel: C.DSR_TYPES[r.type] + (r.field && C.DSR_CORRECTION_FIELDS[r.field] ? ` — ${C.DSR_CORRECTION_FIELDS[r.field].label.toLowerCase()}` : ''),
     createdAt: r.created_at, answerBy: r.public_due_at, completedAt: r.completed_at, response: r.response, hasExport: !!r.export,
     ...(admin && {
       processAfter: r.process_after, internalDueAt: r.internal_due_at, handledBy: r.handled_by,
@@ -1164,9 +1179,33 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), 
       throw httpError(409, 'You already have an open request of this type');
     }
     const t = now();
-    const r = db.prepare(`INSERT INTO dsr_requests (public_id, user_id, type, details, created_at, process_after, internal_due_at, public_due_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(newPublicId('DSR', 'dsr_requests'), u.id, type, text(req.body.details, 1000), t,
-      t + C.DSR_AUTO_PROCESS_AFTER_DAYS * C.DAY, t + C.DSR_INTERNAL_SLA_DAYS * C.DAY, t + C.DSR_PUBLIC_SLA_DAYS * C.DAY);
+    // "Correct my data" says exactly what to correct, so most corrections are handled at once.
+    let field = null, auto = null;
+    if (type === 'correction') {
+      field = req.body.field;
+      const f = C.DSR_CORRECTION_FIELDS[field];
+      if (!f) throw httpError(400, 'Choose what needs correcting');
+      if (f.mode === 'auto') {
+        const v = req.body.value;
+        const changed = applyProfile(u, field === 'trusted' ? { trusted: v } : { [field]: v });
+        if (!changed.length) throw httpError(400, 'Enter the correct value');
+        auto = `${f.label} has been corrected.`;
+      } else if (f.mode === 'guide') {
+        auto = f.guide;
+      } else if (!text(req.body.details, 1000)) {
+        throw httpError(400, 'Tell us what is wrong and what it should be');
+      }
+    }
+    const r = db.prepare(`INSERT INTO dsr_requests (public_id, user_id, type, details, created_at, process_after, internal_due_at, public_due_at, field)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(newPublicId('DSR', 'dsr_requests'), u.id, type, text(req.body.details, 1000), t,
+      t + C.DSR_AUTO_PROCESS_AFTER_DAYS * C.DAY, t + C.DSR_INTERNAL_SLA_DAYS * C.DAY, t + C.DSR_PUBLIC_SLA_DAYS * C.DAY, field);
+    if (auto) {
+      db.prepare("UPDATE dsr_requests SET status = 'completed', completed_at = ?, handled_by = 'auto', response = ? WHERE id = ?").run(t, auto, r.lastInsertRowid);
+      const done = db.prepare('SELECT * FROM dsr_requests WHERE id = ?').get(r.lastInsertRowid);
+      audit.log({ action: 'dsr.completed', entity: 'dsr', entityId: done.public_id, details: { type, field, handledBy: 'auto', userId: u.id } });
+      queue('email', u.email, 'dsr_completed', `Privacy request ${done.public_id}: ${auto}`, { userId: u.id });
+      return dsrView(done);
+    }
     const row = db.prepare('SELECT * FROM dsr_requests WHERE id = ?').get(r.lastInsertRowid);
     queue('email', u.email, 'dsr_received', `We received your privacy request ${row.public_id} (${C.DSR_TYPES[type]}). We will answer within ${C.DSR_PUBLIC_SLA_DAYS - 2}–${C.DSR_PUBLIC_SLA_DAYS} days.`, { userId: u.id });
     return dsrView(row);

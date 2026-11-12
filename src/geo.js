@@ -32,4 +32,23 @@ function isValidPoint(p) {
     Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
 }
 
-module.exports = { haversineKm, pointToSegmentKm, isValidPoint };
+/** Decode a Google/OSRM encoded polyline (precision 5) into [{lat, lng}]. */
+function decodePolyline(str) {
+  const out = []; let i = 0, lat = 0, lng = 0;
+  const next = () => {
+    let shift = 0, result = 0, b;
+    do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && i < str.length);
+    return (result & 1) ? ~(result >> 1) : (result >> 1);
+  };
+  while (i < str.length) { lat += next(); lng += next(); out.push({ lat: lat / 1e5, lng: lng / 1e5 }); }
+  return out;
+}
+
+/** Shortest distance (km) from a point to a path of points. */
+function pointToPathKm(p, path) {
+  let best = Infinity;
+  for (let k = 1; k < path.length; k++) best = Math.min(best, pointToSegmentKm(p, path[k - 1], path[k]));
+  return best;
+}
+
+module.exports = { haversineKm, pointToSegmentKm, isValidPoint, decodePolyline, pointToPathKm };

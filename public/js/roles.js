@@ -27,9 +27,10 @@ function renderRider(app) {
       <button id="see-fares" class="btn block" ${b.src && b.dst ? '' : 'disabled'}>See fares</button>
     </div>
     <div id="est"></div><div id="quote"></div>`;
-  S.map = makeMap($('#hmap'), { src: b.src, dst: b.dst });
+  S.map = makeMap($('#hmap'), { src: b.src, dst: b.dst, polyline: S.estimate && S.estimate.route.polyline });
+  if (b.src) S.lastSeen = b.src;
   bindTodos(app);
-  const setPoint = (k) => (p) => { b[k] = p; S.estimate = null; S.quote = null; render(); };
+  const setPoint = (k) => (p) => { b[k] = p; b.autoFailed = false; S.estimate = null; S.quote = null; render(); };
   $('#pick-src').onclick = () => placePicker('Pickup point', setPoint('src'));
   $('#pick-dst').onclick = () => placePicker('Destination', setPoint('dst'));
   $('#pet').onchange = (e) => { b.pet = e.target.checked; S.quote = null; $('#quote').innerHTML = ''; };
@@ -37,10 +38,14 @@ function renderRider(app) {
   if (b.forGuest) loadGuests();
   // Pickup is picked automatically from GPS (shown with its DIGIPIN).
   if (!b.src && !b.gpsTried) { b.gpsTried = true; myLocation().then(setPoint('src')).catch(() => { const t = $('#pick-src .t'); if (t) t.textContent = 'Choose pickup point'; }); }
-  $('#see-fares').onclick = run(async () => {
+  const loadFares = async (scroll) => {
     S.estimate = await api('POST', '/api/trips/estimate', { src: pointBody(b.src), dst: pointBody(b.dst) });
-    showEstimate(); $('#est').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
+    if (S.map) S.map.setRoute(b.src, b.dst, S.estimate.route.polyline); // draw the road path
+    showEstimate(); if (scroll) $('#est').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  $('#see-fares').onclick = run(() => loadFares(true));
+  // As soon as both ends are known, fetch the road route and fares without waiting for a tap.
+  if (b.src && b.dst && !S.estimate && !b.loading && !b.autoFailed) { b.loading = true; loadFares(false).catch((e) => { b.autoFailed = true; toast(e.message, true); }).finally(() => { b.loading = false; }); }
   if (S.estimate) showEstimate();
   if (S.quote) showQuote();
 }
@@ -57,7 +62,7 @@ function showEstimate() {
   const e = S.estimate; const b = S.booking;
   $('#est').innerHTML = `<div class="card">
     <div class="between"><h2 style="margin:0">Fares for this trip</h2><span class="chip ${e.route.traffic === 'Light' ? '' : 'warn'}">${ic('clock')}${e.route.etaMin} min · ${esc(e.route.traffic)} traffic</span></div>
-    <p class="muted small" style="margin:4px 0 8px">${e.route.distanceKm} km · ${e.route.source === 'google-live-traffic' ? 'live Google traffic' : 'traffic estimated by time of day'} · incl. GST and Olub fee</p>
+    <p class="muted small" style="margin:4px 0 8px">${e.route.distanceKm} km · ${e.route.source === 'google-live-traffic' ? 'by road, live Google traffic' : e.route.source === 'osm-road' ? 'by road · traffic estimated by time of day' : 'distance and traffic estimated'} · incl. GST and Olub fee</p>
     ${e.options.map((o) => `<div class="opt"><div class="vi">${ic(VEH_ICON[o.type])}</div><div class="grow"><b>${esc(o.label)}</b><div class="muted small">${rs(o.perKm)}/km${o.tollTotal ? ` · tolls ${rs(o.tollTotal)}` : ''}</div></div><b class="p">≈ ${rs(o.riderPays)}</b></div>`).join('')}
     <p class="muted small" style="margin-top:8px">${esc(e.note)}</p>
     <button id="scan" class="btn accent block">${ic('camera')}Scan driver's QR</button>
@@ -282,7 +287,7 @@ function renderDriverTrip(app, t) {
     ${t.status === 'completed' ? '' : tripMapHtml(t)}
     <div class="card">${steps(t.status)}
       <div class="between"><h2 style="margin:0">${{ accepted: 'Pick up your customer', started: 'Ride in progress', completed: t.paidAt ? 'Ride complete' : 'Collect payment' }[t.status]}</h2>${starsHtml(t.rider.rating)}</div>
-      <p style="margin:6px 0"><b>${who}</b> · <span class="chip grey">${esc((t.guest || t.rider).publicId)}</span> ${t.pet ? `<span class="chip warn">${ic('paw')}Pet</span>` : ''}</p>
+      <p style="margin:6px 0">${t.rider.photo ? `<img src="${t.rider.photo}" alt="" class="avatar" style="width:40px;height:40px;border-radius:12px;vertical-align:middle;margin-right:8px">` : ''}<b>${who}</b> · <span class="chip grey">${esc((t.guest || t.rider).publicId)}</span> ${t.pet ? `<span class="chip warn">${ic('paw')}Pet</span>` : ''}</p>
       ${t.status === 'accepted' ? `
         <label class="f">Customer's 4-digit code</label><input id="otp" inputmode="numeric" maxlength="4" class="otp-in" placeholder="••••">
         <label class="check"><input type="checkbox" id="fit"><span><b>I am healthy, fit and fine to drive.</b> I have not had alcohol, tobacco or drugs, and I am not sleepy or unwell.</span></label>

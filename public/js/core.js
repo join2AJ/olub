@@ -155,19 +155,37 @@ async function shareText(text) {
   try { await navigator.clipboard.writeText(text); toast('Link copied — paste it in WhatsApp or SMS'); } catch { prompt('Copy this link', text); }
 }
 
+/** Decode an encoded polyline (precision 5) into [[lat, lng], …]. */
+function decodePolyline(str) {
+  const out = []; let i = 0, lat = 0, lng = 0;
+  const next = () => {
+    let shift = 0, result = 0, b;
+    do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && i < str.length);
+    return (result & 1) ? ~(result >> 1) : (result >> 1);
+  };
+  while (i < str.length) { lat += next(); lng += next(); out.push([lat / 1e5, lng / 1e5]); }
+  return out;
+}
+
 // ---------- maps (Leaflet + OpenStreetMap tiles) ----------
-function makeMap(el, { src, dst, last, path, onPick } = {}) {
+function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
   if (!window.L) { el.innerHTML = '<div class="empty">Map unavailable</div>'; return null; }
   const map = L.map(el, { zoomControl: false, attributionControl: true }).setView([20.6, 78.9], 4);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
   const icon = (cls, html = '') => L.divIcon({ className: '', html: `<div class="mk ${cls}">${html}</div>`, iconSize: cls === 'car' ? [34, 34] : [18, 18], iconAnchor: cls === 'car' ? [17, 17] : [9, 9] });
   const h = { map, car: null, line: null, trail: null, layers: [] };
-  h.setRoute = (a, b) => {
+  h.setRoute = (a, b, poly) => {
     h.layers.forEach((l) => l.remove()); h.layers = [];
     const pts = [];
+    const road = poly ? decodePolyline(poly) : null;
     if (a) { h.layers.push(L.marker([a.lat, a.lng], { icon: icon('') }).addTo(map)); pts.push([a.lat, a.lng]); }
     if (b) { h.layers.push(L.marker([b.lat, b.lng], { icon: icon('d') }).addTo(map)); pts.push([b.lat, b.lng]); }
-    if (pts.length === 2) { h.layers.push(L.polyline(pts, { color: '#0f7b4a', weight: 4, opacity: .55, dashArray: '2 9', lineCap: 'round' }).addTo(map)); map.fitBounds(pts, { padding: [36, 36] }); }
+    if (road && road.length > 1) {
+      // The actual road path.
+      h.layers.push(L.polyline(road, { color: '#ffffff', weight: 8, opacity: .9, lineCap: 'round', lineJoin: 'round' }).addTo(map));
+      h.layers.push(L.polyline(road, { color: '#0f7b4a', weight: 5, opacity: .95, lineCap: 'round', lineJoin: 'round' }).addTo(map));
+      map.fitBounds(road, { padding: [36, 36] });
+    } else if (pts.length === 2) { h.layers.push(L.polyline(pts, { color: '#0f7b4a', weight: 4, opacity: .55, dashArray: '2 9', lineCap: 'round' }).addTo(map)); map.fitBounds(pts, { padding: [36, 36] }); }
     else if (pts.length === 1) map.setView(pts[0], 14);
   };
   h.setCar = (p) => {
@@ -177,9 +195,9 @@ function makeMap(el, { src, dst, last, path, onPick } = {}) {
   };
   h.setTrail = (pts) => {
     if (h.trail) h.trail.remove();
-    if (pts && pts.length > 1) h.trail = L.polyline(pts.map((p) => [p.lat, p.lng]), { color: '#0f7b4a', weight: 5, opacity: .9 }).addTo(map);
+    if (pts && pts.length > 1) h.trail = L.polyline(pts.map((p) => [p.lat, p.lng]), { color: '#ffb300', weight: 5, opacity: .95 }).addTo(map);
   };
-  h.setRoute(src, dst); h.setCar(last); h.setTrail(path);
+  h.setRoute(src, dst, polyline); h.setCar(last); h.setTrail(path);
   if (onPick) map.on('click', (e) => onPick({ lat: e.latlng.lat, lng: e.latlng.lng }));
   setTimeout(() => { if (el.isConnected && map._loaded) map.invalidateSize(); }, 60);
   return h;

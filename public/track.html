@@ -33,7 +33,7 @@
         + '<div class="card"><div class="driver">' + (t.driver.photo ? '<img class="avatar" src="' + t.driver.photo + '" alt="">' : '<div class="avatar">' + esc(t.driver.name[0]) + '</div>')
         + '<div><b>' + esc(t.driver.name) + '</b> ' + starsHtml(t.driver.rating) + '<div style="margin-top:4px"><span class="plate">' + esc(t.driver.vehicleNumber) + '</span> <span class="muted">' + esc(t.driver.vehicleLabel) + ' ' + esc(t.driver.vehicleModel || '') + '</span></div></div></div></div>'
         + '<p class="center muted small">Shared by ' + esc(t.traveller) + ' through Olub. This page updates by itself and stops working 2 hours after the ride.</p>';
-      if (!built) { $('#app').innerHTML = '<div id="tmap" class="map"></div><div id="info"></div>'; map = makeMap($('#tmap'), { src: t.src, dst: t.dst }); built = true; }
+      if (!built) { $('#app').innerHTML = '<div id="tmap" class="map"></div><div id="info"></div>'; map = makeMap($('#tmap'), { src: t.src, dst: t.dst, polyline: t.routePolyline }); built = true; }
       $('#info').innerHTML = html;
       if (map) { map.setCar(t.last); map.setTrail(t.path); }
     }

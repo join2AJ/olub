@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **12 Nov 2026, 15:00 IST**
+Last updated: **12 Nov 2026, 15:22 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 74 complete · 10 in progress · 6 planned · 10 need you
+**Totals:** 78 complete · 9 in progress · 6 planned · 10 need you
 
 ---
 
@@ -38,7 +38,8 @@ This is the single list of everything asked for Olub, and where each point stand
 | 2.8 | Customer gets an OTP in the app and tells the driver; driver enters it; trip starts | ✅ Complete | 11 Nov 2026, 21:10 | Five wrong tries locks the trip |
 | 2.9 | Booking for someone else (guest) with their pickup point | ✅ Complete | 12 Nov 2026, 08:33 | Guest gets their own ID; saved for next time |
 | 2.10 | Pay at the start or at the end | ✅ Complete | 12 Nov 2026, 08:33 | Any difference (waiting, tolls) is settled at the end |
-| 2.11 | Search any address | 🟡 In progress | 12 Nov 2026, 08:33 | Works with a Google Maps key. Without one: 9 sample places, map pin, GPS or DIGIPIN |
+| 2.11 | Search any address | ✅ Complete | 12 Nov 2026, 15:22 | Free OpenStreetMap search, nearest matches first (e.g. "lulu mall"). Google search is used instead when a key is added |
+| 2.12 | Map shows the road path, not a straight line | ✅ Complete | 12 Nov 2026, 15:22 | Road route and road distance from OpenStreetMap; fares appear as soon as both ends are chosen |
 
 ## 3. Fare
 
@@ -97,6 +98,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | # | Point | Status | Updated (IST) | Notes |
 |---|---|---|---|---|
 | 6.1 | Unique ID for every driver, customer and guest | ✅ Complete | 12 Nov 2026, 02:20 | OLB-D-…, OLB-C-…, OLB-G-… |
+| 6.7 | "Personal details" with photo upload | ✅ Complete | 12 Nov 2026, 15:22 | Photo, name, date of birth, sex. The driver sees the customer's photo during the ride |
 | 6.2 | Phone confirmed | 🟡 In progress | 12 Nov 2026, 02:20 | OTP logic complete. Sending real SMS needs a provider (12.4) |
 | 6.3 | Email confirmed | 🟡 In progress | 12 Nov 2026, 02:20 | Code logic complete. Sending real email needs a provider (12.4) |
 | 6.4 | Customers and drivers never see each other's numbers | ✅ Complete | 11 Nov 2026, 21:10 | |
@@ -111,7 +113,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 7.2 | Loved ones track the ride live, from–to | ✅ Complete | 12 Nov 2026, 08:33 | Link opens in any browser; shows DIGIPIN |
 | 7.3 | Alert if the ride is 5–10 minutes late | ✅ Complete | 12 Nov 2026, 02:20 | +5 min: told; +10 min: asked to check on you. "I'm safe" button |
 | 7.4 | SOS button | ✅ Complete | 12 Nov 2026, 08:33 | Alerts the contact with location; one tap to call 112 |
-| 7.5 | Off-route alarm | ✅ Complete | 12 Nov 2026, 08:33 | From the Drive app. Uses a straight-line corridor until maps are connected |
+| 7.5 | Off-route alarm | ✅ Complete | 12 Nov 2026, 15:22 | From the Drive app. Measured from the road path (2 km allowed) |
 | 7.6 | Driving safety score per ride | ✅ Complete | 12 Nov 2026, 08:33 | From the Drive app: overspeed and harsh braking |
 | 7.7 | Alerts actually reach the contact's phone | 🟡 In progress | 12 Nov 2026, 08:33 | Messages are written and queued; delivery needs an SMS provider (12.4). The customer can share the link by WhatsApp today |
 
@@ -135,7 +137,8 @@ This is the single list of everything asked for Olub, and where each point stand
 | 9.5 | Requests auto-answered in 3 days, promised in 10 | ✅ Complete | 12 Nov 2026, 08:33 | Admin can refuse during the 3 days. See the caution in the README |
 | 9.6 | Police / RTO can flag a vehicle | ✅ Complete | 12 Nov 2026, 08:33 | Admin is alerted and can put the driver on hold |
 | 9.7 | Privacy requests (DPDP, GDPR) from verified IDs | ✅ Complete | 12 Nov 2026, 02:20 | Copy, correct, delete, withdraw consent, complain |
-| 9.8 | Privacy requests answered automatically in 5–7 days; website says 10–12 | ✅ Complete | 12 Nov 2026, 02:20 | Corrections and complaints need a person |
+| 9.8 | Privacy requests answered automatically in 5–7 days; website says 10–12 | ✅ Complete | 12 Nov 2026, 02:20 | Complaints need a person |
+| 9.12 | "Correct my data" has sub-categories so it is handled automatically | ✅ Complete | 12 Nov 2026, 15:22 | Name, date of birth, sex, trusted contact: corrected at once. Email, photo, vehicle: answered at once with where to change. Mobile number, trip, other: a person answers |
 | 9.9 | Audit log of privacy and authority requests | ✅ Complete | 12 Nov 2026, 08:33 | |
 | 9.10 | Controls for ISO 27001, 22301, 31000, NIST CSF, DPDP, GDPR | 🟡 In progress | 12 Nov 2026, 08:33 | Technical controls and documents are in `docs/compliance/`. Certification itself is 12.5 |
 | 9.11 | Rules followed by Ola, Uber, Rapido (aggregator guidelines) | 🟡 In progress | 12 Nov 2026, 08:33 | Built: duty hours, fee cap, fit check, grievance contact, trip records. Open items are in section 12 |
@@ -153,7 +156,7 @@ This is the single list of everything asked for Olub, and where each point stand
 
 | # | Point | Status | Updated (IST) | Notes |
 |---|---|---|---|---|
-| 11.1 | Road-following routes and off-route check on real roads | 📅 Planned | 12 Nov 2026, 08:33 | Needs the maps key |
+| 11.1 | Live traffic from Google and own routing server | 📅 Planned | 12 Nov 2026, 15:22 | Roads and search now use free public OpenStreetMap servers, which have no uptime promise and no live traffic |
 | 11.2 | Hindi and regional languages | 📅 Planned | 12 Nov 2026, 08:33 | |
 | 11.3 | UPI payment straight to the driver from the app | 📅 Planned | 12 Nov 2026, 08:33 | |
 | 11.4 | More from the Drive app: weekly report card, hotspots, incident case file | 📅 Planned | 12 Nov 2026, 08:33 | |

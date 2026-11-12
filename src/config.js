@@ -142,6 +142,20 @@ module.exports = {
   DSR_AUTO_PROCESS_AFTER_DAYS: Number(process.env.OLUB_DSR_AUTO_DAYS ?? 5),
   DSR_INTERNAL_SLA_DAYS: 7,
   DSR_PUBLIC_SLA_DAYS: 12,       // what the website promises ("10–12 days")
+  // "Correct my data": what can be corrected. auto = applied at once; guide = answered at once with
+  // where to change it (it needs a fresh check); manual = a person at Olub answers.
+  DSR_CORRECTION_FIELDS: {
+    name: { label: 'My name', mode: 'auto' },
+    dob: { label: 'My date of birth', mode: 'auto' },
+    gender: { label: 'My sex', mode: 'auto' },
+    trusted: { label: 'My trusted contact', mode: 'auto' },
+    email: { label: 'My email address', mode: 'guide', guide: 'Open Profile → Email, enter the new address and confirm it with the code we send. It changes as soon as you confirm.' },
+    photo: { label: 'My photo', mode: 'guide', guide: 'Open Profile → Personal details and choose a new photo.' },
+    vehicle: { label: 'My vehicle, licence or documents', mode: 'guide', guide: 'Open Profile → Vehicle, documents & cab rules, change the details and submit. Changed documents are verified again.' },
+    phone: { label: 'My mobile number', mode: 'manual' },
+    trip: { label: 'A trip, fare or invoice', mode: 'manual' },
+    other: { label: 'Something else', mode: 'manual' },
+  },
   DSR_TYPES: {
     access: 'Send me a copy of my data',
     correction: 'Correct my data',
