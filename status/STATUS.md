@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **12 Nov 2026, 22:47 IST**
+Last updated: **12 Nov 2026, 22:56 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 94 complete · 11 in progress · 6 planned · 10 need you
+**Totals:** 95 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -171,6 +171,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.15 | Better alignment | ✅ Complete | 12 Nov 2026, 22:47 | Cab rows on one grid (icon, text, price over button); equal-height tiles |
 | 10.16 | More premium look in the original green theme | ✅ Complete | 12 Nov 2026, 22:47 | Deeper green, soft gold trim, calmer spacing and shadows |
 | 10.17 | One-tap demo buttons: Passenger, Driver, Admin | ✅ Complete | 12 Nov 2026, 22:47 | On the sign-in screen in test mode. Loads the demo data by itself. Remove with `OLUB_DEMO_LOGIN=0` |
+| 10.18 | Booking like Ola: select a ride above, then one button below | ✅ Complete | 12 Nov 2026, 22:56 | Tap a row (Book Any or a vehicle type); it gets the green border and a "drivers nearby" tag. One dark button books the selected ride. Pay timing and Preferences sit just above it |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |

@@ -16,13 +16,7 @@ function renderRider(app) {
         <button id="pick-src"><span class="dotp"></span><span class="t ${b.src ? '' : 'ph'}">${esc(b.src ? b.src.name : 'Finding your location…')}</span>${pinTag(b.src)}</button>
         <button id="pick-dst"><span class="dotd"></span><span class="t ${b.dst ? '' : 'ph'}">${esc(b.dst ? b.dst.name : 'Choose destination')}</span>${pinTag(b.dst)}</button>
       </div>
-      <div class="optchips"><button id="for-guest" class="${b.forGuest ? 'on' : ''}">${ic('users')}For someone else</button><button id="pet" class="${b.pet ? 'on' : ''}">${ic('paw')}With a pet</button></div>
-      <div id="guest-box" ${b.forGuest ? '' : 'hidden'} style="margin-top:10px">
-        <select id="g-sel"><option value="">New person…</option></select>
-        <div id="g-new" class="grid2" style="margin-top:8px"><input id="g-name" placeholder="Their name" value="${esc((b.guest && b.guest.name) || '')}"><input id="g-phone" placeholder="Their mobile (optional)" inputmode="numeric" value="${esc((b.guest && b.guest.phone) || '')}"></div>
-        <p class="muted small" style="margin:6px 0 0">Set the pickup to where they are.</p>
-      </div>
-      <button id="see-fares" class="btn block" ${b.src && b.dst ? '' : 'disabled'}>See cabs and fares</button>
+      ${b.src && b.dst && !S.estimate ? '<div class="searching" id="loading"></div><p class="muted small center" style="margin:0">Looking for cabs near you…</p>' : ''}
     </div>
     ${todoCard()}
     ${S.me.cancelDues ? `<div class="card warn">${ic('wallet')} ${rs(S.me.cancelDues)} cancellation fee from an earlier booking will be added to your next ride.</div>` : ''}
@@ -37,67 +31,83 @@ function renderRider(app) {
   const setPoint = (k) => (p) => { b[k] = p; b.autoFailed = false; S.estimate = null; S.nearby = null; S.quote = null; render(); };
   $('#pick-src').onclick = () => placePicker('Pickup point', setPoint('src'));
   $('#pick-dst').onclick = () => placePicker('Destination', setPoint('dst'));
-  $('#pet').onclick = () => { b.pet = !b.pet; S.quote = null; S.nearby = null; S.estimate = null; b.autoFailed = false; render(); };
-  $('#for-guest').onclick = () => { b.forGuest = !b.forGuest; $('#for-guest').classList.toggle('on', b.forGuest); $('#guest-box').hidden = !b.forGuest; if (b.forGuest) loadGuests(); };
-  if (b.forGuest) loadGuests();
   // Pickup is picked automatically from GPS (shown with its DIGIPIN).
   if (!b.src && !b.gpsTried) { b.gpsTried = true; myLocation().then(setPoint('src')).catch(() => { const t = $('#pick-src .t'); if (t) t.textContent = 'Choose pickup point'; }); }
-  const loadFares = async (scroll) => {
-    const body = { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet };
-    [S.estimate, S.nearby] = await Promise.all([api('POST', '/api/trips/estimate', body), api('POST', '/api/trips/nearby', body).catch(() => ({ options: [], hexes: [], cabs: [], searchedRings: 0 }))]);
-    if (S.map) { S.map.setRoute(b.src, b.dst, S.estimate.route.polyline); S.map.setHexGrid(b.src, S.nearby.cabs); S.map.setCabs(S.nearby.cabs); }
-    showEstimate(); if (scroll) $('#est').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  $('#see-fares').onclick = run(() => loadFares(true));
-  // As soon as both ends are known, fetch the road route, nearby cabs and fares without waiting for a tap.
-  if (b.src && b.dst && !S.estimate && !b.loading && !b.autoFailed) { b.loading = true; loadFares(false).catch((e) => { b.autoFailed = true; toast(e.message, true); }).finally(() => { b.loading = false; }); }
+  // As soon as both ends are known, fetch the road route, nearby cabs and fares.
+  if (b.src && b.dst && !S.estimate && !b.loading && !b.autoFailed) {
+    b.loading = true;
+    loadFares().then(() => { if (S.tab === 'home' && !S.trip) render(); }).catch((e) => { b.autoFailed = true; toast(e.message, true); const l = $('#loading'); if (l) l.outerHTML = '<button class="btn ghost block" id="retry">Try again</button>'; const r = $('#retry'); if (r) r.onclick = () => { b.autoFailed = false; render(); }; }).finally(() => { b.loading = false; });
+  }
   if (S.estimate) showEstimate();
   if (S.quote) showQuote();
 }
 
-function guestBody() {
+async function loadFares() {
   const b = S.booking;
-  if (!b.forGuest) return undefined;
-  return $('#g-sel').value ? { id: Number($('#g-sel').value) } : { name: $('#g-name').value, phone: $('#g-phone').value };
+  const body = { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet };
+  [S.estimate, S.nearby] = await Promise.all([api('POST', '/api/trips/estimate', body), api('POST', '/api/trips/nearby', body).catch(() => ({ options: [], hexes: [], cabs: [], searchedRings: 0 }))]);
 }
 
-// Olub finds the cab: confirm the vehicle type, then the nearest driver is asked.
-function matchSheet(o) {
-  const b = S.booking; b.payTiming = b.payTiming || 'end';
-  const sh = sheet(o.any ? 'Book any nearby cab' : `Request ${/^[aeiou]/i.test(o.label) ? 'an' : 'a'} ${o.label}`, `
-    ${o.any ? `<p class="muted">We ask every free cab near you, nearest first, whatever the type. The first driver to accept comes to you. Expect ${o.lo === o.hi ? rs(o.lo) : `${rs(o.lo)} – ${rs(o.hi)}`} depending on which cab accepts. The nearest right now:</p>` : ''}
-    <div class="between"><div><div class="bignum">${rs(o.riderPays)}</div><div class="muted small">incl. GST and ${rs(o.platformFee)} Olub fee</div></div>
-      <div class="vi" style="width:56px;height:56px;border-radius:18px;background:var(--soft);color:var(--brand);display:grid;place-items:center">${ic(VEH_ICON[o.type])}</div></div>
-    <table class="fare" style="margin-top:10px"><tr><td>${ic('car')} Cab comes to you</td><td>${o.pickupKm} km · ${o.awayMin} min</td></tr>
-      <tr><td>${ic('nav')} Your trip</td><td>${o.tripKm} km</td></tr>
-      <tr class="sub"><td colspan="2">You pay for both distances at the ${esc(o.label)} rate. The Olub fee is ${rs(S.cfg.platformFee)} up to ${S.cfg.platformFeeLongKm} km in total, ${rs(S.cfg.platformFeeLong)} beyond.</td></tr></table>
-    <p class="muted small" style="margin-top:8px">${ic('target')} We ask the nearest free ${esc(o.label.toLowerCase())} first. If they do not accept in ${S.cfg.matchOfferSeconds} seconds, the next nearest is asked. The fare is updated for that cab's distance.</p>
-    <h3>When will you pay?</h3>
-    <div class="seg" id="mpay"><button data-p="start" class="${b.payTiming === 'start' ? 'on' : ''}">At the start</button><button data-p="end" class="${b.payTiming === 'end' ? 'on' : ''}">At the end</button></div>
-    <button id="mgo" class="btn block">Find my cab</button>`);
-  $$('#mpay button', sh.el).forEach((x) => { x.onclick = () => { b.payTiming = x.dataset.p; $$('#mpay button').forEach((y) => y.classList.toggle('on', y === x)); }; });
-  $('#mgo', sh.el).onclick = run(async () => {
-    await api('POST', '/api/trips', { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming, match: o.any ? {} : { vehicleType: o.type } });
-    sh.close(); S.quote = null; S.estimate = null; S.nearby = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
-    await refreshTrip(); render(); window.scrollTo(0, 0);
+/** The guest this ride is for, as chosen in Preferences. */
+function guestBody() {
+  const b = S.booking;
+  return b.forGuest && b.guest && (b.guest.id || b.guest.name) ? b.guest : undefined;
+}
+
+// Preferences: who the ride is for, and pets.
+async function prefsSheet() {
+  const b = S.booking; const g = b.guest || {};
+  const guests = await api('GET', '/api/guests').catch(() => []);
+  const sh = sheet('Preferences', `
+    <div class="toggle"><span>${ic('users')} Booking for someone else</span><label class="switch"><input type="checkbox" id="pf-guest" ${b.forGuest ? 'checked' : ''}><i></i></label></div>
+    <div id="pf-gbox" ${b.forGuest ? '' : 'hidden'}>
+      <select id="pf-gsel"><option value="">New person…</option>${guests.map((x) => `<option value="${x.id}" ${g.id === x.id ? 'selected' : ''}>${esc(x.name)} · ${esc(x.publicId)}</option>`).join('')}</select>
+      <div id="pf-gnew" class="grid2" style="margin-top:8px" ${g.id ? 'hidden' : ''}><input id="pf-gname" placeholder="Their name" value="${esc(g.name || '')}"><input id="pf-gphone" placeholder="Their mobile (optional)" inputmode="numeric" value="${esc(g.phone || '')}"></div>
+      <p class="muted small" style="margin:6px 0 0">Set the pickup to where they are. They get their own Olub guest ID.</p>
+    </div>
+    <div class="toggle"><span>${ic('paw')} Travelling with a pet</span><label class="switch"><input type="checkbox" id="pf-pet" ${b.pet ? 'checked' : ''}><i></i></label></div>
+    <p class="muted small">Only cabs whose driver accepts pets are shown. The driver's pet charge, if any, is added to the fare.</p>
+    <button id="pf-save" class="btn block">Done</button>`);
+  $('#pf-guest', sh.el).onchange = (e) => { $('#pf-gbox').hidden = !e.target.checked; };
+  $('#pf-gsel', sh.el).onchange = (e) => { $('#pf-gnew').hidden = !!e.target.value; };
+  $('#pf-save', sh.el).onclick = run(async () => {
+    const forGuest = $('#pf-guest').checked; const sel = $('#pf-gsel').value; const pet = $('#pf-pet').checked;
+    if (forGuest && !sel && !$('#pf-gname').value.trim()) throw new Error("Enter the person's name");
+    b.forGuest = forGuest;
+    b.guest = forGuest ? (sel ? { id: Number(sel), name: guests.find((x) => String(x.id) === sel).name } : { name: $('#pf-gname').value.trim(), phone: $('#pf-gphone').value.trim() }) : null;
+    const petChanged = pet !== b.pet; b.pet = pet;
+    sh.close();
+    if (petChanged) { S.estimate = null; S.nearby = null; S.quote = null; b.autoFailed = false; }
+    render();
   });
 }
 
+// Choose a row above, then press the one button below — like Ola.
 function showEstimate() {
   const e = S.estimate; const b = S.booking; const n = S.nearby || { options: [] };
-  const byType = Object.fromEntries(e.options.map((o) => [o.type, o]));
+  b.payTiming = b.payTiming || 'end';
+  const opts = n.options;
+  const dropBy = (min) => new Date(Date.now() + (min + e.route.etaMin) * 60000).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  const lo = opts.length ? Math.min(...opts.map((o) => o.riderPays)) : 0, hi = opts.length ? Math.max(...opts.map((o) => o.riderPays)) : 0;
+  const fastest = opts.length ? [...opts].sort((p, q) => p.awayMin - q.awayMin)[0] : null;
+  const rows = opts.length ? [{ key: 'any', label: 'Book Any', min: fastest.awayMin, price: lo === hi ? rs(lo) : `${rs(lo)} - ${rs(hi)}`, sub: opts.map((o) => o.label).join(', '), count: opts.reduce((s, o) => s + o.count, 0), icon: 'sparkle', fast: true },
+    ...opts.map((o) => ({ key: o.type, label: o.label, min: o.awayMin, price: rs(o.riderPays), sub: `${o.awayKm} km away${o.rating.count ? ` · rated ${o.rating.average.toFixed(1)}` : ''}`, count: o.count, icon: VEH_ICON[o.type] }))] : [];
+  if (!rows.some((r) => r.key === b.pick)) b.pick = 'any';
+  const sel = rows.find((r) => r.key === b.pick);
   $('#est').innerHTML = `
-    <div class="card"><div class="between"><h2 style="margin:0">Cabs near you</h2><span class="chip ${e.route.traffic === 'Light' ? '' : 'warn'}">${ic('clock')}${e.route.etaMin} min · ${esc(e.route.traffic)}</span></div>
-      <p class="muted small" style="margin:4px 0 6px">${e.route.distanceKm} km ${e.route.source === 'estimate' ? '(estimated)' : 'by road'} · fares include the cab coming to you, GST and the Olub fee</p>
-      ${n.options.length ? (() => { const lo = Math.min(...n.options.map((o) => o.riderPays)), hi = Math.max(...n.options.map((o) => o.riderPays)); const fast = Math.min(...n.options.map((o) => o.awayMin));
-        const drop = new Date(Date.now() + (fast + e.route.etaMin) * 60000).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }); const range = lo === hi ? rs(lo) : `${rs(lo)} – ${rs(hi)}`;
-        return `<div class="bookany"><div class="vi any">${ic('car')}</div><div class="grow"><div class="between"><b style="font-size:18px">Book Any</b><span class="fastest">${ic('bolt')}Fastest</span></div><b class="range">${range}</b>
-          <div class="muted small">${fast} min · Drop by ${drop}</div><div class="muted small">${n.options.map((o) => esc(o.label)).join(', ')}</div></div></div>
-          <button id="bookany" class="btn dark block" style="margin-top:8px">Book Any · ${range}</button><h3>Or choose a type</h3>`; })() : ''}
-      ${n.options.map((o) => `<div class="opt"><div class="vi">${ic(VEH_ICON[o.type])}</div><div class="grow"><b>${esc(o.label)}</b> ${o.rating.count ? `<span class="stars small">${ic('star', 'fill')}${o.rating.average.toFixed(1)}</span>` : ''}
-        <div class="away">${o.awayKm} km away · ${o.awayMin} min${o.count > 1 ? ` · ${o.count} nearby` : ''}</div></div>
-        <div class="pr"><b class="p">${rs(o.riderPays)}</b><button class="btn req" data-match="${o.type}">Request</button></div></div>`).join('')
-      || `<div class="empty" style="padding:16px 6px">${ic('search')}<div>No free cab within about ${S.cfg.platformFeeLongKm + 2} km right now${b.pet ? ' that takes pets' : ''}.<br>You can still book a cab standing in front of you.</div></div>`}
+    <div class="card picklist">
+      <div class="between"><h2 style="margin:0">Choose a ride</h2><span class="chip ${e.route.traffic === 'Light' ? '' : 'warn'}">${ic('clock')}${e.route.distanceKm} km · ${e.route.etaMin} min</span></div>
+      ${rows.map((r) => `<button class="pick ${r.key === b.pick ? 'on' : ''}" data-pick="${r.key}">
+          ${r.key === b.pick ? `<span class="tag"><i></i>${r.count} driver${r.count === 1 ? '' : 's'} nearby</span>` : ''}
+          <span class="vi">${ic(r.icon)}</span>
+          <span class="tx"><b>${esc(r.label)}${r.fast ? ` <span class="fastest">${ic('bolt')}Fastest</span>` : ''}</b><span>${r.min} min · Drop by ${dropBy(r.min)}</span>${r.key === b.pick ? `<span>${esc(r.sub)}</span>` : ''}</span>
+          <span class="pz">${r.price}</span></button>`).join('')
+      || `<div class="empty" style="padding:18px 6px">${ic('search')}<div>No free cab near you right now${b.pet ? ' that takes pets' : ''}.<br>You can still book a cab standing in front of you, below.</div></div>`}
+      ${rows.length ? '<p class="muted small" style="margin:10px 2px 0">Fares include the cab coming to you, GST and the Olub fee.</p>' : ''}
+    </div>
+    <div class="bookbar">
+      <div class="bb-row"><button id="paytoggle">${ic('wallet')}<span>Pay at the ${b.payTiming}</span></button><button id="prefs">${ic('gear')}<span>Preferences${b.pet || b.forGuest ? ` · ${[b.forGuest && 'guest', b.pet && 'pet'].filter(Boolean).join(', ')}` : ''}</span></button></div>
+      ${rows.length ? `<button id="book" class="btn dark block">Book ${esc(sel.key === 'any' ? 'Any' : sel.label)} · ${sel.price}</button>` : ''}
     </div>
     <div class="card"><h2>Cab right in front of you?</h2>
       <p class="muted small" style="margin:0 0 4px">No waiting and no charge for coming to you. Typical fares for this trip:</p>
@@ -107,22 +117,20 @@ function showEstimate() {
       <div class="row" style="margin-top:10px"><div class="plate-in grow ${b.mode === 'phone' ? 'phone' : ''}" id="plate-wrap"><span class="ind">IND</span>
         <input id="drv" value="${esc(b.driver)}" placeholder="${b.mode === 'plate' ? 'KA01AB1234' : '98765 43210'}" autocapitalize="characters" autocomplete="off"></div>
         <button id="find" class="btn">${ic('search')}</button></div></div>`;
-  void byType;
-  $$('[data-match]').forEach((x) => { x.onclick = () => matchSheet(n.options.find((o) => o.type === x.dataset.match)); });
-  if ($('#bookany')) $('#bookany').onclick = () => { const near = [...n.options].sort((p, q) => p.awayMin - q.awayMin)[0]; matchSheet({ ...near, any: true, lo: Math.min(...n.options.map((o) => o.riderPays)), hi: Math.max(...n.options.map((o) => o.riderPays)) }); };
+  if (S.map) { S.map.setRoute(b.src, b.dst, e.route.polyline); S.map.setHexGrid(b.src, n.cabs); S.map.setCabs(n.cabs); }
+  $$('[data-pick]').forEach((x) => { x.onclick = () => { b.pick = x.dataset.pick; const y = window.scrollY; showEstimate(); window.scrollTo(0, y); }; });
+  $('#paytoggle').onclick = () => { b.payTiming = b.payTiming === 'end' ? 'start' : 'end'; $('#paytoggle span').textContent = `Pay at the ${b.payTiming}`; };
+  $('#prefs').onclick = run(prefsSheet);
+  if ($('#book')) $('#book').onclick = run(async () => {
+    await api('POST', '/api/trips', { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming, match: b.pick === 'any' ? {} : { vehicleType: b.pick } });
+    S.quote = null; S.estimate = null; S.nearby = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
+    await refreshTrip(); render(); window.scrollTo(0, 0);
+  });
   $$('#mode button').forEach((x) => { x.onclick = () => { b.mode = x.dataset.m; b.driver = ''; showEstimate(); }; });
   $('#scan').onclick = () => scanSheet((code) => { b.driver = code; getQuote(); });
   const go = run(async () => { b.driver = $('#drv').value; await getQuote(true); });
   $('#find').onclick = go;
   $('#drv').onkeydown = (ev) => { if (ev.key === 'Enter') go(ev); };
-}
-
-async function loadGuests() {
-  const sel = $('#g-sel'); if (!sel || sel.dataset.loaded) return;
-  sel.dataset.loaded = 1;
-  const gs = await api('GET', '/api/guests').catch(() => []);
-  sel.innerHTML = `<option value="">New person…</option>${gs.map((g) => `<option value="${g.id}">${esc(g.name)} · ${esc(g.publicId)}</option>`).join('')}`;
-  sel.onchange = () => { $('#g-new').hidden = !!sel.value; };
 }
 
 async function getQuote(rethrow) {

@@ -389,3 +389,25 @@ input, select, textarea { border-radius: 15px; border-color: var(--line); }
 
 .bookany .vi.any { width: 54px; height: 54px; border-radius: 17px; background: linear-gradient(180deg, #11804e, #0c6b41); color: #fff; display: grid; place-items: center; flex: 0 0 auto; box-shadow: 0 8px 18px -8px rgba(12,107,65,.7); }
 .bookany .vi.any svg.i { width: 28px; height: 28px; }
+
+/* ---------- v0.8: choose a row, then one button (Ola-style) ---------- */
+.picklist { padding: 16px 12px 14px; } .picklist > .between, .picklist > p { padding: 0 6px; }
+.pick { position: relative; display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; width: 100%; text-align: left;
+  background: transparent; border: 2px solid transparent; border-radius: 18px; padding: 14px 10px; margin-top: 6px; font: inherit; color: var(--ink); transition: background .2s, border-color .2s, margin .2s var(--ease); }
+.pick .vi { width: 52px; height: 52px; border-radius: 16px; background: var(--soft); color: var(--brand); display: grid; place-items: center; } .pick .vi svg.i { width: 26px; height: 26px; }
+.pick .tx { display: grid; gap: 2px; min-width: 0; } .pick .tx b { font-size: 18px; letter-spacing: -.015em; } .pick .tx > span { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick .pz { font-size: 18px; font-weight: 750; letter-spacing: -.02em; white-space: nowrap; align-self: start; padding-top: 2px; }
+.pick.on { border-color: var(--brand); background: linear-gradient(100deg, var(--soft), var(--card) 85%); margin-top: 30px; box-shadow: 0 10px 24px -16px rgba(12,107,65,.6); }
+.pick.on .vi { background: linear-gradient(180deg, #11804e, #0c6b41); color: #fff; }
+.pick .tag { position: absolute; left: -2px; top: -25px; background: var(--brand); color: #fff; font-size: 12.5px; font-weight: 650; padding: 4px 12px 5px 10px; border-radius: 10px 10px 0 0; display: inline-flex; align-items: center; gap: 7px; }
+.pick .tag i { width: 8px; height: 8px; border-radius: 50%; background: #7dffb0; box-shadow: 0 0 0 0 rgba(125,255,176,.7); animation: live 1.6s ease-out infinite; }
+@keyframes live { to { box-shadow: 0 0 0 8px rgba(125,255,176,0); } }
+.bookbar { position: sticky; bottom: calc(74px + var(--safe-b)); z-index: 15; background: var(--card); border-radius: 22px; padding: 6px 12px 12px; margin-bottom: 14px; box-shadow: 0 -6px 24px -10px rgba(12,32,24,.25), var(--shadow); border: 1px solid rgba(12,32,24,.05); }
+.bb-row { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.bb-row button { background: none; border: 0; font: inherit; font-weight: 600; font-size: 14.5px; color: var(--ink); padding: 12px 6px; display: inline-flex; gap: 8px; align-items: center; justify-content: center; min-width: 0; }
+.bb-row button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bb-row button + button { border-left: 1px solid var(--line); }
+.bookbar .btn.dark { margin-top: 0; }
+
+.pick .tx > span { white-space: normal; line-height: 1.35; }
+.pick[data-pick="any"] .pz { font-size: 16px; }
+.pick[data-pick="any"] .tx b { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
