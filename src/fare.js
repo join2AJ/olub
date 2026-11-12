@@ -13,70 +13,76 @@ function defaultTollFor(state) {
 }
 
 /**
- * Pure fare calculation. Same function is used for the up-front quote and the
- * final bill (with actual wait minutes and tolls).
+ * Pure fare calculation, used for both the up-front quote and the final bill.
  *
  * @param {object} p
  * @param {number} p.distanceKm      road distance
- * @param {string} p.vehicleType     key of C.VEHICLES
- * @param {string} p.condition       key of C.CONDITION_MULTIPLIER
+ * @param {string} p.vehicleType
+ * @param {object} [p.rates]         rate card ({base, perKm, perWaitMin, minFare}); defaults to config
+ * @param {string} p.condition       vehicle condition
  * @param {number} p.completedTrips  driver's completed Olub trips
- * @param {string} [p.road]          key of C.ROAD_MULTIPLIER
- * @param {string} [p.traffic]       key of C.TRAFFIC_WAIT_PER_KM (quote only)
- * @param {number} [p.waitMinutes]   actual wait; overrides traffic estimate
+ * @param {number} [p.waitMinutes]   traffic delay / waiting (live traffic for quotes, actual for bills)
  * @param {Array<{name:string,amount:number}>} [p.tolls]
+ * @param {number} [p.petCharge]     driver's own pet surcharge (goes to driver)
  * @param {boolean} [p.calamity]     rain / disaster mode → reduced platform fee
  * @param {number} [p.discount]      e.g. driver-verification reward
  */
 function calculateFare(p) {
-  const v = C.VEHICLES[p.vehicleType];
+  const v = p.rates || C.VEHICLES[p.vehicleType];
   if (!v) throw new Error(`Unknown vehicle type: ${p.vehicleType}`);
   const distanceKm = Math.max(0, Number(p.distanceKm) || 0);
   const conditionMul = C.CONDITION_MULTIPLIER[p.condition] ?? 1;
-  const roadMul = C.ROAD_MULTIPLIER[p.road || 'good'] ?? 1;
   const tier = experienceTier(Math.max(0, p.completedTrips || 0));
-
-  const waitMinutes = p.waitMinutes != null
-    ? Math.max(0, Number(p.waitMinutes) || 0)
-    : distanceKm * (C.TRAFFIC_WAIT_PER_KM[p.traffic || 'light'] ?? 0);
+  const waitMinutes = Math.max(0, Number(p.waitMinutes) || 0);
   const billableWait = Math.max(0, waitMinutes - C.FREE_WAIT_MINUTES);
 
-  const distanceFare = v.base + distanceKm * v.perKm;
-  const adjusted = distanceFare * conditionMul * roadMul * tier.multiplier;
+  const adjusted = (v.base + distanceKm * v.perKm) * conditionMul * tier.multiplier;
   const rideFare = Math.round(Math.max(v.minFare, adjusted));
   const waitCharge = Math.round(billableWait * v.perWaitMin);
+  const petCharge = Math.max(0, Math.round(Number(p.petCharge) || 0));
   const tolls = (p.tolls || []).map((t) => ({ ...t, amount: round2(t.amount) }));
-  const tollTotal = tolls.reduce((s, t) => s + t.amount, 0);
+  const tollTotal = round2(tolls.reduce((s, t) => s + t.amount, 0));
 
-  const driverFare = rideFare + waitCharge + round2(tollTotal);
+  const driverFare = rideFare + waitCharge + petCharge + tollTotal;
   const platformFee = p.calamity ? C.PLATFORM_FEE_CALAMITY : C.PLATFORM_FEE;
+  // GST: the platform fee is GST-inclusive; ride GST is charged on top of the ride (not on tolls).
+  const gstRate = p.gstRate ?? C.RIDE_GST_RATE;
+  const rideGst = round2((rideFare + waitCharge + petCharge) * gstRate);
+  const platformFeeGst = round2(platformFee - platformFee / (1 + C.PLATFORM_FEE_GST_RATE));
   const discount = Math.max(0, p.discount || 0);
-  const riderPays = round2(Math.max(0, driverFare + platformFee - discount));
+  const riderPays = round2(Math.max(0, driverFare + rideGst + platformFee - discount));
 
   return {
     vehicleType: p.vehicleType,
     distanceKm: round2(distanceKm),
     breakdown: {
       base: v.base,
+      perKm: v.perKm,
       distanceCharge: round2(distanceKm * v.perKm),
       conditionMultiplier: conditionMul,
-      roadMultiplier: roadMul,
       experienceMultiplier: tier.multiplier,
       experienceLabel: tier.label,
       minFareApplied: adjusted < v.minFare,
       rideFare,
       waitMinutes: Math.round(waitMinutes),
       waitCharge,
+      petCharge,
       tolls,
-      tollTotal: round2(tollTotal),
+      tollTotal,
     },
-    driverFare,            // 100% to the driver (ride + wait + tolls)
-    platformFee,           // Olub's only cut
+    driverFare,            // 100% to the driver (ride + wait + pet + tolls)
+    platformFee,           // Olub's only cut (GST inclusive)
+    taxes: {
+      rideGstRate: gstRate, rideGst,
+      platformFeeGstRate: C.PLATFORM_FEE_GST_RATE, platformFeeGst, platformFeeBase: round2(platformFee - platformFeeGst),
+      totalGst: round2(rideGst + platformFeeGst),
+    },
+    // Taken from the driver's wallet when the trip ends (the rider pays the driver directly).
+    walletDeduction: round2(platformFee + rideGst),
     calamity: !!p.calamity,
     discount,
     riderPays,
-    // Positive: driver owes Olub this (rider paid driver directly).
-    // Negative: Olub owes driver (e.g. verification discount > fee).
+    // Positive: driver owes Olub. Negative: Olub owes driver.
     platformNet: round2(platformFee - discount),
   };
 }

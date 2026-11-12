@@ -2,32 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#0f7b4a">
   <title>Olub — book the cab in front of you</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="icon.svg">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand"><span class="logo">O</span>Olub</div>
-    <div id="who" class="who"></div>
+  <div id="splash" class="splash"><div class="splash-logo"><span>O</span></div><div class="splash-name">Olub</div><div class="splash-tag">Ride with pride</div></div>
+  <header class="top" id="top" hidden>
+    <div class="brand"><span class="logo">O</span><span>Olub</span></div>
+    <button id="idchip" class="idchip" hidden></button>
   </header>
   <main id="app"></main>
+  <nav id="nav" class="nav" hidden></nav>
+  <div id="sheet-root"></div>
   <div id="toast" class="toast" hidden></div>
 
-  <!-- in-app voice call (numbers stay hidden) -->
   <div id="call" class="call" hidden>
     <div class="call-card">
-      <div class="call-avatar">📞</div>
+      <div class="call-ring"><span></span><span></span><div id="call-icon"></div></div>
       <div id="call-name" class="call-name"></div>
       <div id="call-state" class="muted"></div>
-      <div class="row center">
-        <button id="call-accept" class="btn ok" hidden>Answer</button>
+      <div class="row center gap">
+        <button id="call-accept" class="btn" hidden>Answer</button>
         <button id="call-end" class="btn danger">End</button>
       </div>
       <audio id="call-audio" autoplay></audio>
     </div>
   </div>
-  <script src="/app.js"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/call.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/roles.js"></script>
+  <script src="js/boot.js"></script>
 </body>
 </html>
