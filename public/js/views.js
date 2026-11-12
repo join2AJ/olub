@@ -33,6 +33,7 @@ function connect() {
 function cancelText(t) {
   const c = t.cancellation || {};
   if (c.youPay) return t.you === 'driver' ? `Ride cancelled. ${rs(c.youPay)} cancellation fee taken from your wallet.` : `Ride cancelled. ${rs(c.youPay)} cancellation fee will be added to your next ride.`;
+  if (c.reason === 'no_driver') return 'No cab accepted this time. Nothing was charged — try again, or scan a cab near you.';
   if (c.charged) return `Ride cancelled. The ${c.charged === 'driver' ? 'driver' : 'customer'} pays the ${rs(c.fee)} fee — you pay nothing.`;
   return 'Ride cancelled. No fee.';
 }
@@ -70,7 +71,7 @@ async function refreshTrip() {
   }
   if (S.trip && S.trip.id !== prevId) S.messages = await api('GET', `/api/trips/${S.trip.id}/messages`);
   if (S.me && S.me.role === 'driver') S.me = await api('GET', '/api/me');
-  syncTracking();
+  syncTracking(); syncPresence();
 }
 
 // ---------------- live GPS during a ride ----------------
@@ -84,6 +85,17 @@ function syncTracking() {
     S.lastPing = Date.now();
     api('POST', `/api/trips/${S.trip.id}/location`, { lat: p.coords.latitude, lng: p.coords.longitude, kmph: p.coords.speed != null ? p.coords.speed * 3.6 : null }).catch(() => {});
   }, () => {}, { enableHighAccuracy: true, maximumAge: 4000 });
+}
+// While a driver is online, tell Olub roughly where the cab is waiting so nearby customers can be matched.
+function syncPresence() {
+  const on = S.me && S.me.role === 'driver' && S.me.driver.online;
+  if (!on) { if (S.presenceId != null) { navigator.geolocation.clearWatch(S.presenceId); S.presenceId = null; } return; }
+  if (S.presenceId != null || !navigator.geolocation) return;
+  S.presenceId = navigator.geolocation.watchPosition((p) => {
+    if (Date.now() - (S.lastPresence || 0) < 25000) return;
+    S.lastPresence = Date.now();
+    api('POST', '/api/driver/location', { lat: p.coords.latitude, lng: p.coords.longitude }).catch(() => {});
+  }, () => {}, { enableHighAccuracy: true, maximumAge: 15000 });
 }
 function stopTracking() {
   if (S.watchId != null) { navigator.geolocation.clearWatch(S.watchId); S.watchId = null; }
@@ -111,8 +123,8 @@ function onSafety(ev) {
 
 // ---------------- shell ----------------
 const TABS = {
-  rider: [['home', 'Ride', 'car'], ['activity', 'Activity', 'list'], ['feedback', 'Ratings', 'star'], ['profile', 'Profile', 'user']],
-  driver: [['home', 'Drive', 'car'], ['money', 'Earnings', 'wallet'], ['feedback', 'Ratings', 'star'], ['profile', 'Profile', 'user']],
+  rider: [['home', 'Ride', 'car'], ['activity', 'Activity', 'list'], ['safety', 'Safety', 'shield'], ['feedback', 'Ratings', 'star'], ['profile', 'Profile', 'user']],
+  driver: [['home', 'Drive', 'car'], ['money', 'Earnings', 'wallet'], ['trips', 'Trips', 'list'], ['feedback', 'Ratings', 'star'], ['profile', 'Profile', 'user']],
   admin: [['home', 'Admin', 'shield'], ['profile', 'Profile', 'user']],
 };
 
@@ -131,7 +143,8 @@ function render() {
   $$('#nav button').forEach((b) => { b.onclick = () => { S.tab = b.dataset.tab; window.scrollTo(0, 0); render(); }; });
   if (S.tab === 'profile') return renderProfile(app);
   if (S.tab === 'feedback') return renderFeedback(app);
-  if (S.tab === 'activity' || S.tab === 'money') return renderInsights(app);
+  if (['activity', 'money', 'trips'].includes(S.tab)) return renderInsights(app);
+  if (S.tab === 'safety') return renderSafety(app);
   if (S.me.role === 'rider') return renderRider(app);
   if (S.me.role === 'driver') return renderDriver(app);
   return renderAdmin(app);
@@ -368,6 +381,7 @@ function fareTable(f, { final = false, forDriver = false } = {}) {
   const b = f.breakdown;
   return `<table class="fare">
     <tr><td>Ride · ${f.distanceKm} km</td><td>${rs(b.rideFare)}</td></tr>
+    ${b.pickupKm ? `<tr class="sub"><td colspan="2">${b.pickupKm} km for the cab to reach ${forDriver ? 'the customer' : 'you'} + ${b.tripKm} km trip</td></tr>` : ''}
     <tr class="sub"><td colspan="2">${rs(b.base)} base + ${rs(b.perKm)}/km · vehicle ×${b.conditionMultiplier} · ${esc(b.experienceLabel)} ×${b.experienceMultiplier}${b.minFareApplied ? ' · minimum fare' : ''}</td></tr>
     ${b.waitCharge || !final ? `<tr><td>Traffic / waiting · ${b.waitMinutes} min${final ? '' : ' (live estimate)'}</td><td>${rs(b.waitCharge)}</td></tr>` : ''}
     ${b.petCharge ? `<tr><td>Pet charge</td><td>${rs(b.petCharge)}</td></tr>` : ''}
@@ -504,55 +518,124 @@ async function renderFeedback(app) {
 }
 
 // ---------------- insights: trips, money, GST ----------------
+const TRIP_ICON = { completed: 'check', cancelled: 'x', rejected: 'ban', requested: 'clock', accepted: 'car', started: 'nav' };
+const TRIP_WORD = { completed: 'Completed', cancelled: 'Cancelled', rejected: 'Declined', requested: 'Waiting', accepted: 'Driver coming', started: 'On the way' };
+
+function tripRows(trips, driver) {
+  const f = S.tripFilter || 'all';
+  const match = { all: () => true, completed: (t) => t.status === 'completed', cancelled: (t) => ['cancelled', 'rejected'].includes(t.status), live: (t) => ['requested', 'accepted', 'started'].includes(t.status) };
+  const list = trips.filter(match[f]);
+  const count = (k) => trips.filter(match[k]).length;
+  return `<div class="filters">${[['all', 'All'], ['completed', 'Completed'], ['cancelled', 'Cancelled'], ['live', 'Live']].map(([k, l]) => `<button data-f="${k}" class="${f === k ? 'on' : ''}">${l} · ${count(k)}</button>`).join('')}</div>
+    ${list.map((t) => { const amt = t.final ? (driver ? t.final.driverFare : t.final.riderPays) : null; const c = t.cancellation; return `<button class="trow ${t.status}" data-trip="${t.id}">
+      <div class="ti">${ic(TRIP_ICON[t.status])}</div>
+      <div class="tm"><b>${esc(t.dst.name)}</b><span class="muted small">from ${esc(t.src.name)}</span>
+        <span class="muted small">${when(t.createdAt)} · ${esc(driver ? (t.guest ? t.guest.name : t.rider.name) : `${t.driver.vehicleLabel} ${t.driver.vehicleNumber}`)}</span></div>
+      <div class="amt">${amt != null ? rs(amt) : (c && c.youPay ? `<span style="color:var(--danger)">−${rs(c.youPay)}</span>` : '')}<div class="muted small" style="font-weight:600">${TRIP_WORD[t.status]}</div></div></button>`; }).join('')
+    || `<div class="card empty">${ic('car')}<div>No trips here yet.</div></div>`}`;
+}
+
+function tripSheet(t, driver) {
+  const f = t.final || t.quote; const c = t.cancellation;
+  const why = { changed_plan: 'Plan changed', mistake: 'Booked by mistake', driver_not_coming: 'Driver was not coming', driver_cancelled: 'Driver could not take the ride', no_driver: 'No cab accepted' };
+  const sh = sheet(`Trip #${t.id}`, `
+    <div class="between"><span class="chip ${t.status === 'completed' ? '' : ['cancelled', 'rejected'].includes(t.status) ? 'danger' : 'warn'}">${ic(TRIP_ICON[t.status])}${TRIP_WORD[t.status]}</span><span class="muted small">${when(t.createdAt)}</span></div>
+    <div class="route" style="pointer-events:none;margin:8px 0"><button><span class="dotp"></span><span class="t">${esc(t.src.name)}</span>${pinTag(t.src)}</button><button><span class="dotd"></span><span class="t">${esc(t.dst.name)}</span>${pinTag(t.dst)}</button></div>
+    ${driver ? `<p><b>${esc(t.guest ? `${t.guest.name} (guest of ${t.rider.name})` : t.rider.name)}</b> · <span class="chip grey">${esc((t.guest || t.rider).publicId)}</span></p>` : driverCard(t.driver)}
+    ${c ? `<div class="card ${c.youPay ? 'alert' : 'soft'}" style="margin-top:10px"><b>${c.by === 'system' ? 'Not booked' : `Cancelled by the ${c.by === 'rider' ? 'customer' : 'driver'}`}</b> — ${esc(why[c.reason] || c.reason || '')}.<br>
+      ${c.youPay ? `You were charged ${rs(c.youPay)}.` : c.charged ? `The ${c.charged === 'rider' ? 'customer' : 'driver'} was charged ${rs(c.fee)}; you paid nothing.` : 'No fee was charged.'}</div>` : ''}
+    ${t.status === 'rejected' ? '<div class="card soft" style="margin-top:10px">The driver declined this request. No fee.</div>' : ''}
+    <h3>${t.final ? 'Bill' : 'Fare quoted'}</h3>${fareTable(f, { final: !!t.final, forDriver: driver })}
+    ${t.safety && t.safety.score != null ? `<p class="muted small" style="margin-top:8px">${ic('shield')} Driving safety score <b>${t.safety.score}</b>/100${t.safety.overspeed ? ` · ${t.safety.overspeed} overspeed` : ''}${t.safety.harshBrakes ? ` · ${t.safety.harshBrakes} harsh braking` : ''}</p>` : ''}
+    ${t.status === 'completed' ? `<div class="grid2" style="margin-top:12px"><button class="btn ghost" id="ts-inv">${ic('file')}Invoice</button>${t.rated ? `<span class="chip" style="justify-content:center">${ic('check')}Rated</span>` : `<button class="btn" id="ts-rate">${ic('star')}Rate</button>`}</div>` : ''}`);
+  const inv = $('#ts-inv', sh.el); if (inv) inv.onclick = run(() => { sh.close(); return invoiceSheet(t.id); });
+  const rt = $('#ts-rate', sh.el); if (rt) rt.onclick = () => { sh.close(); ratingSheet(t); };
+}
+
 async function renderInsights(app) {
-  app.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
-  const driver = S.me.role === 'driver';
+  app.innerHTML = '<div class="skel" style="height:190px"></div><div class="skel"></div><div class="skel"></div>';
+  const driver = S.me.role === 'driver'; const mode = S.tab;
   const [x, trips, wallet] = await Promise.all([api('GET', '/api/insights'), api('GET', '/api/trips'), driver ? api('GET', '/api/driver/wallet') : null]);
+  if (S.tab !== mode) return;
   const money = (t) => (driver ? t.driverKeeps : t.riderPaid);
   const maxDay = Math.max(1, ...x.days.map((d) => d.amount)); const maxHour = Math.max(1, ...x.hours);
   const delta = x.lastWeek.trips ? Math.round(((money(x.week) - money(x.lastWeek)) / Math.max(1, money(x.lastWeek))) * 100) : null;
   const hr = (h) => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
-  app.innerHTML = `
-    ${driver ? `<div class="card hero"><div class="between"><div><div class="muted">Wallet balance</div><div class="bignum">${rs(wallet.balance)}</div>
-        <div class="muted small">${wallet.ok ? `Keep at least ${rs(wallet.min)} to get customers` : `Below ${rs(wallet.min)} — top up to get customers`}</div></div>
-        <button id="topup" class="btn accent" style="position:relative;z-index:1">${ic('plus')}Top up</button></div></div>` : ''}
-    <div class="card"><div class="between"><h2 style="margin:0">This week</h2>${delta != null ? `<span class="chip ${delta < 0 && driver ? 'warn' : ''}">${delta >= 0 ? '+' : ''}${delta}% vs last week</span>` : ''}</div>
-      <div class="bignum" style="margin-top:6px">${rs(money(x.week))}</div><p class="muted">${x.week.trips} trip${x.week.trips === 1 ? '' : 's'} · ${x.week.km} km ${driver ? '· after Olub fee and GST' : ''}</p>
-      <div class="bars">${x.days.map((d, i) => `<div class="${d.amount ? '' : 'z'}" style="height:${Math.max(3, d.amount / maxDay * 100)}%;animation-delay:${i * 30}ms" title="${d.date}: ${rs(d.amount)}"></div>`).join('')}</div>
-      <div class="axis"><span>14 days ago</span><span>Today</span></div></div>
-    <div class="grid2" style="margin-bottom:12px">
+  const nDone = trips.filter((t) => t.status === 'completed').length, nCan = trips.filter((t) => ['cancelled', 'rejected'].includes(t.status)).length, nLive = trips.length - nDone - nCan;
+  const pct = (n) => (trips.length ? (n / trips.length) * 100 : 0);
+  const bars = `<div class="bars">${x.days.map((d, i) => `<div class="${d.amount ? '' : 'z'}" style="height:${Math.max(4, d.amount / maxDay * 100)}%;animation-delay:${i * 30}ms"></div>`).join('')}</div><div class="axis"><span>14 days ago</span><span>Today</span></div>`;
+  const dash = `<div class="dash"><div class="between" style="position:relative;z-index:1"><span class="muted">${driver ? 'You kept in the last 30 days' : 'Spent in the last 30 days'}</span>${delta != null ? `<span class="chip" style="background:rgba(255,255,255,.14);color:#fff">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta)}% this week</span>` : ''}</div>
+      <div class="bignum" style="position:relative;z-index:1">${rs(money(x.month))}</div>
+      <div class="mini"><div><b>${x.month.trips}</b><span>trips</span></div><div><b>${x.month.km}</b><span>km</span></div><div><b>${rs(x.month.trips ? Math.round(money(x.month) / x.month.trips) : 0)}</b><span>per trip</span></div></div>
+      <div style="position:relative;z-index:1;margin-top:12px">${bars}</div></div>`;
+  const breakdown = `<div class="card"><h2>All bookings</h2><div class="segmeter"><i style="width:${pct(nDone)}%;background:var(--brand)"></i><i style="width:${pct(nLive)}%;background:var(--accent)"></i><i style="width:${pct(nCan)}%;background:var(--danger)"></i></div>
+      <div class="legend"><span><i style="background:var(--brand)"></i>${nDone} completed</span><span><i style="background:var(--accent)"></i>${nLive} live</span><span><i style="background:var(--danger)"></i>${nCan} cancelled or declined</span></div></div>`;
+  const tiles = `<div class="grid2" style="margin-bottom:12px">
       <div class="stat good"><div class="v">${rs(money(x.all))}</div><div class="l">${driver ? 'You kept, all time' : 'Spent, all time'}</div></div>
-      <div class="stat"><div class="v">${x.all.trips}</div><div class="l">Trips · ${x.all.km} km</div></div>
+      <div class="stat"><div class="v">${x.all.trips}</div><div class="l">Completed trips · ${x.all.km} km</div></div>
       <div class="stat"><div class="v">${rs(x.all.totalGst)}</div><div class="l">GST ${driver ? 'collected & remitted' : 'paid'}</div></div>
       <div class="stat"><div class="v">${rs(x.all.platformFees)}</div><div class="l">Olub fees${driver ? ` · ${x.commissionPercent}% of fares` : ''}</div></div>
-      <div class="stat"><div class="v">${rs(x.averageFare)}</div><div class="l">Average per trip · ${rs(x.perKm)}/km</div></div>
-      <div class="stat"><div class="v">${x.safety.average != null ? x.safety.average : '—'}</div><div class="l">Safety score${x.safety.trips ? ` · ${x.safety.harshBrakes} harsh brakes, ${x.safety.overspeed} overspeed` : ''}</div></div>
-    </div>
-    ${driver && x.monthly ? `<div class="card"><h2>Monthly charge</h2>
-      <p class="muted small">${rs(x.monthly.max)} or ${x.monthly.sharePercent}% of what you earned in the month, whichever is less. Taken from your wallet on the 1st. Olub's total (trip fees + this) never goes above 20% of your earnings.</p>
-      <table class="fare"><tr><td>Earned this month so far</td><td>${rs(x.monthly.thisMonth.earned)}</td></tr><tr><td>Trip fees already paid</td><td>${rs(x.monthly.thisMonth.tripFees)}</td></tr>
-      <tr class="total"><td>Charge if the month ended today</td><td>${rs(x.monthly.thisMonth.amount)}</td></tr></table>
-      ${x.monthly.past.map((m) => `<div class="between small" style="padding:4px 0"><span class="muted">${esc(m.month)} · earned ${rs(m.earned)}</span><b>${rs(m.amount)}</b></div>`).join('')}</div>` : ''}
-    ${driver ? `<div class="card"><h2>Money earned vs GST</h2><table class="fare">
-      <tr><td>Customers paid you</td><td>${rs(x.all.riderPaid)}</td></tr>
-      <tr><td>GST on rides (Olub remits)</td><td>−${rs(x.all.rideGst)}</td></tr>
-      <tr><td>Olub fees <span class="muted small">incl. ${rs(x.all.platformFeeGst)} GST</span></td><td>−${rs(x.all.platformFees)}</td></tr>
-      <tr class="sub"><td colspan="2">Includes ${rs(x.all.tolls)} of tolls you paid on the way.</td></tr>
-      <tr class="total"><td>You kept</td><td>${rs(x.all.driverKeeps)}</td></tr></table></div>` : ''}
-    ${x.all.trips ? `<div class="card"><h2>When you ${driver ? 'drive' : 'ride'}</h2><div class="bars hours">${x.hours.map((h) => `<div class="${h ? '' : 'z'}" style="height:${Math.max(3, h / maxHour * 100)}%"></div>`).join('')}</div>
+      <div class="stat"><div class="v">${rs(x.perKm)}</div><div class="l">per km on average</div></div>
+      <div class="stat"><div class="v">${x.safety.average != null ? x.safety.average : '—'}<span class="muted small">/100</span></div><div class="l">Safety score${x.safety.trips ? ` · ${x.safety.overspeed} overspeed` : ''}</div></div></div>`;
+  const habits = x.all.trips ? `<div class="card"><h2>When you ${driver ? 'drive' : 'ride'}</h2><div class="bars hours">${x.hours.map((h) => `<div class="${h ? '' : 'z'}" style="height:${Math.max(3, h / maxHour * 100)}%"></div>`).join('')}</div>
       <div class="axis"><span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span></div>
       ${x.busiestHour != null ? `<p class="muted small" style="margin-top:8px">Busiest around ${hr(x.busiestHour)}.</p>` : ''}
-      ${x.topPlaces.length ? `<h3>Top destinations</h3>${x.topPlaces.map((p) => `<div class="between" style="padding:5px 0"><span>${ic('pin')} ${esc(p.name)}</span><b>${p.visits}×</b></div>`).join('')}` : ''}</div>` : ''}
-    ${x.months.length ? `<div class="card"><h2>Month by month</h2><div class="list">${x.months.map((m) => `<div class="between"><div><b>${new Date(`${m.key}-15`).toLocaleString('en-IN', { month: 'long', year: 'numeric' })}</b><div class="muted small">${m.trips} trips · ${m.km} km · GST ${rs(m.totalGst)}</div></div><b>${rs(money(m))}</b></div>`).join('')}</div></div>` : ''}
-    ${driver ? `<div class="card"><h2>Wallet activity</h2><div class="list">${wallet.txns.map((t) => `<div class="txn"><div><b>${{ topup: 'Top-up', platform_fee: 'Olub fee', ride_gst: 'Ride GST', verify_reward: 'Reward from Olub', adjustment: 'Adjustment', cancel_fee: 'Cancellation fee', cancel_fee_passthrough: "Customer's cancellation fee", monthly_fee: 'Monthly charge' }[t.type] || t.type}</b>
-      <div class="muted small">${when(t.ts)}${t.tripId ? ` · trip #${t.tripId}` : ''}</div></div><span class="a ${t.amount >= 0 ? 'cr' : 'dr'}">${t.amount >= 0 ? '+' : '−'}${rs(Math.abs(t.amount))}</span></div>`).join('') || '<p class="muted">No activity yet.</p>'}</div></div>` : ''}
-    <div class="card"><h2>Trips</h2><div class="list">${trips.map((t) => `<div><div class="between"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.dst.name)}</b>
-        <span class="chip ${t.status === 'completed' ? '' : 'grey'}">${esc(t.status)}</span></div>
-      <div class="muted small">${when(t.createdAt)} · ${esc(driver ? t.rider.name : t.driver.vehicleNumber)}${t.final ? ` · ${rs(driver ? t.final.driverFare : t.final.riderPays)}` : ''}${t.safety && t.safety.score != null ? ` · safety ${t.safety.score}` : ''}</div>
-      ${t.status === 'completed' ? `<div class="row" style="margin-top:6px"><button class="btn small ghost" data-inv="${t.id}">${ic('file')}Invoice</button>${t.rated ? '' : `<button class="btn small ghost" data-rate="${t.id}">${ic('star')}Rate</button>`}</div>` : ''}</div>`).join('') || `<div class="empty">${ic('car')}<div>No trips yet.</div></div>`}</div></div>`;
+      ${x.topPlaces.length ? `<h3>Top destinations</h3>${x.topPlaces.map((p) => `<div class="between" style="padding:5px 0"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ic('pin')} ${esc(p.name)}</span><b>${p.visits}×</b></div>`).join('')}` : ''}</div>` : '';
+  const months = x.months.length ? `<div class="card"><h2>Month by month</h2><div class="list">${x.months.map((m) => `<div class="between"><div><b>${new Date(`${m.key}-15`).toLocaleString('en-IN', { month: 'long', year: 'numeric' })}</b><div class="muted small">${m.trips} trips · ${m.km} km · GST ${rs(m.totalGst)}</div></div><b>${rs(money(m))}</b></div>`).join('')}</div></div>` : '';
+
+  if (!driver) {
+    app.innerHTML = `${dash}${breakdown}${tiles}${habits}${months}<h2 style="margin:18px 2px 8px">My trips</h2><div id="trips">${tripRows(trips, false)}</div>`;
+  } else if (mode === 'trips') {
+    app.innerHTML = `${breakdown}<div id="trips">${tripRows(trips, true)}</div>`;
+  } else {
+    app.innerHTML = `
+      <div class="card hero"><div class="between"><div><div class="muted">Wallet balance</div><div class="bignum">${rs(wallet.balance)}</div>
+        <div class="muted small">${wallet.ok ? `Keep at least ${rs(wallet.min)} to get customers` : `Below ${rs(wallet.min)} — top up to get customers`}</div></div>
+        <button id="topup" class="btn accent" style="position:relative;z-index:1">${ic('plus')}Top up</button></div></div>
+      ${dash}${tiles}
+      ${x.monthly ? `<div class="card"><h2>Monthly charge</h2>
+        <p class="muted small">${rs(x.monthly.max)} or ${x.monthly.sharePercent}% of what you earned in the month, whichever is less. Taken from your wallet on the 1st. Olub's total (trip fees + this) never goes above 20% of your earnings.</p>
+        <table class="fare"><tr><td>Earned this month so far</td><td>${rs(x.monthly.thisMonth.earned)}</td></tr><tr><td>Trip fees already paid</td><td>${rs(x.monthly.thisMonth.tripFees)}</td></tr>
+        <tr class="total"><td>Charge if the month ended today</td><td>${rs(x.monthly.thisMonth.amount)}</td></tr></table>
+        ${x.monthly.past.map((m) => `<div class="between small" style="padding:4px 0"><span class="muted">${esc(m.month)} · earned ${rs(m.earned)}</span><b>${rs(m.amount)}</b></div>`).join('')}</div>` : ''}
+      <div class="card"><h2>Money earned vs GST</h2><table class="fare">
+        <tr><td>Customers paid you</td><td>${rs(x.all.riderPaid)}</td></tr>
+        <tr><td>GST on rides (Olub remits)</td><td>−${rs(x.all.rideGst)}</td></tr>
+        <tr><td>Olub fees <span class="muted small">incl. ${rs(x.all.platformFeeGst)} GST</span></td><td>−${rs(x.all.platformFees)}</td></tr>
+        <tr class="sub"><td colspan="2">Includes ${rs(x.all.tolls)} of tolls you paid on the way.</td></tr>
+        <tr class="total"><td>You kept</td><td>${rs(x.all.driverKeeps)}</td></tr></table></div>
+      ${habits}${months}
+      <div class="card"><h2>Wallet activity</h2><div class="list">${wallet.txns.map((t) => `<div class="txn"><div><b>${{ topup: 'Top-up', platform_fee: 'Olub fee', ride_gst: 'Ride GST', verify_reward: 'Reward from Olub', adjustment: 'Adjustment', cancel_fee: 'Cancellation fee', cancel_fee_passthrough: "Customer's cancellation fee", monthly_fee: 'Monthly charge' }[t.type] || t.type}</b>
+        <div class="muted small">${when(t.ts)}${t.tripId ? ` · trip #${t.tripId}` : ''}</div></div><span class="a ${t.amount >= 0 ? 'cr' : 'dr'}">${t.amount >= 0 ? '+' : '−'}${rs(Math.abs(t.amount))}</span></div>`).join('') || '<p class="muted">No activity yet.</p>'}</div></div>`;
+  }
   if ($('#topup')) $('#topup').onclick = topupSheet;
-  $$('[data-inv]').forEach((b) => { b.onclick = run(() => invoiceSheet(b.dataset.inv)); });
-  $$('[data-rate]').forEach((b) => { b.onclick = () => ratingSheet(trips.find((t) => String(t.id) === b.dataset.rate)); });
+  const bindTrips = () => {
+    $$('[data-f]').forEach((b) => { b.onclick = () => { S.tripFilter = b.dataset.f; $('#trips').innerHTML = tripRows(trips, driver); bindTrips(); }; });
+    $$('[data-trip]').forEach((b) => { b.onclick = () => tripSheet(trips.find((t) => String(t.id) === b.dataset.trip), driver); });
+  };
+  bindTrips();
+}
+
+// ---------------- safety (customers) ----------------
+function renderSafety(app) {
+  const t = S.me.trusted;
+  const feat = (icon, title, text) => `<div class="feat"><div class="n">${ic(icon)}</div><div><b>${title}</b><div class="muted small">${text}</div></div></div>`;
+  app.innerHTML = `
+    <div class="card hero"><h1 style="margin:0">Your safety</h1><p class="muted" style="margin:6px 0 0">Every Olub ride is tracked, and someone you trust can follow it.</p></div>
+    <div class="card"><div class="between"><h2 style="margin:0">Trusted contact</h2><button class="btn small ghost" id="s-edit">${t ? 'Change' : 'Add'}</button></div>
+      ${t ? `<p style="margin:8px 0 0"><b>${esc(t.name)}</b>${t.relation ? ` · ${esc(t.relation)}` : ''}<br><span class="muted">${esc(t.phone)}</span></p>` : '<p class="muted" style="margin:8px 0 0">Required before your first ride.</p>'}</div>
+    <div class="card"><h2>On every ride</h2>
+      ${feat('share', 'Live tracking link', `${t ? esc(t.name) : 'Your contact'} can watch the cab on a map, with its DIGIPIN, without installing anything.`)}
+      ${feat('clock', 'Late-ride alert', `If you are ${S.cfg.overdue.warn} minutes late your contact is told; at ${S.cfg.overdue.alert} minutes they are asked to check on you.`)}
+      ${feat('nav', 'Off-route alarm', 'If the cab leaves the expected road, you and your contact are alerted.')}
+      ${feat('alert', 'SOS', 'One tap sends your location and the cab number to your contact, with a button to call 112.')}
+      ${feat('heart', 'Fit-to-drive check', 'Your driver must confirm they are healthy and have not had alcohol or drugs before the ride can start.')}
+      ${feat('lock', 'Private numbers', 'Calls and chat go through Olub. The driver never sees your mobile number.')}
+      ${feat('shield', 'Verified drivers', 'Licence, RC, permit, insurance and ID are checked, and you see the driver\'s photo, rating and number plate first.')}</div>
+    <a class="btn danger block" href="tel:112">${ic('phone')}Call 112 (emergency)</a>
+    ${S.trip && S.trip.trackPath ? `<button class="btn ghost block" id="s-share">${ic('share')}Share my current ride</button>` : ''}`;
+  $('#s-edit').onclick = trustedSheet;
+  if ($('#s-share')) $('#s-share').onclick = run(() => shareText(`Track my Olub ride live (${S.trip.driver.vehicleNumber}): ${S.base || location.origin}${S.trip.trackPath}`));
 }
 
 function topupSheet() {

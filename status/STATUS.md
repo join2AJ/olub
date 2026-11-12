@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **12 Nov 2026, 15:22 IST**
+Last updated: **12 Nov 2026, 16:04 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 78 complete · 9 in progress · 6 planned · 10 need you
+**Totals:** 86 complete · 10 in progress · 6 planned · 10 need you
 
 ---
 
@@ -40,6 +40,16 @@ This is the single list of everything asked for Olub, and where each point stand
 | 2.10 | Pay at the start or at the end | ✅ Complete | 12 Nov 2026, 08:33 | Any difference (waiting, tolls) is settled at the end |
 | 2.11 | Search any address | ✅ Complete | 12 Nov 2026, 15:22 | Free OpenStreetMap search, nearest matches first (e.g. "lulu mall"). Google search is used instead when a key is added |
 | 2.12 | Map shows the road path, not a straight line | ✅ Complete | 12 Nov 2026, 15:22 | Road route and road distance from OpenStreetMap; fares appear as soon as both ends are chosen |
+
+### Finding a cab nearby
+
+| # | Point | Status | Updated (IST) | Notes |
+|---|---|---|---|---|
+| 2.13 | Nearby drivers found with a hexagonal search, like Ola and Uber | ✅ Complete | 12 Nov 2026, 16:04 | Pickup is the centre hexagon; the search widens ring by ring (about 1 km each) up to about 12 km. Shown on the map |
+| 2.14 | Nearest cab is connected first; if they accept they come to the customer | ✅ Complete | 12 Nov 2026, 16:04 | If they decline or do not answer in 45 seconds, the next nearest is asked. Nobody left → cancelled, no fee |
+| 2.15 | Fare covers driver-to-customer distance plus the trip | ✅ Complete | 12 Nov 2026, 16:04 | Both at the vehicle's per-km rate, shown as separate lines |
+| 2.16 | Olub fee uses the total distance (10 km to reach + 1 km trip = 11 km → ₹15) | ✅ Complete | 12 Nov 2026, 16:04 | |
+| 2.17 | Online drivers share where they are waiting | 🟡 In progress | 12 Nov 2026, 16:04 | Works while the driver app is open. Sending position with the app in the background is not built yet |
 
 ## 3. Fare
 
@@ -151,6 +161,10 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.2 | Keep the logo | ✅ Complete | 12 Nov 2026, 02:20 | Also the app icon and splash |
 | 10.3 | New UI: theme, animation, icons | ✅ Complete | 12 Nov 2026, 08:33 | Map-first, number-plate input, dark mode |
 | 10.4 | This status table in the repo | ✅ Complete | 12 Nov 2026, 08:33 | |
+| 10.5 | Uber-style map | ✅ Complete | 12 Nov 2026, 16:04 | Full-width grey map, black road line, cabs around you, hexagon search area |
+| 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
+| 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
+| 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 4 drivers, 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |
 
 ## 11. Planned next
 

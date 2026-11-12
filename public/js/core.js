@@ -171,9 +171,12 @@ function decodePolyline(str) {
 function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
   if (!window.L) { el.innerHTML = '<div class="empty">Map unavailable</div>'; return null; }
   const map = L.map(el, { zoomControl: false, attributionControl: true }).setView([20.6, 78.9], 4);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  // Quiet, greyed basemap so the route and cabs stand out (dark at night).
+  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); // toned down in CSS
   const icon = (cls, html = '') => L.divIcon({ className: '', html: `<div class="mk ${cls}">${html}</div>`, iconSize: cls === 'car' ? [34, 34] : [18, 18], iconAnchor: cls === 'car' ? [17, 17] : [9, 9] });
-  const h = { map, car: null, line: null, trail: null, layers: [] };
+  const h = { map, car: null, line: null, trail: null, layers: [], hexLayers: [], cabLayers: [] };
+  const INK = dark ? '#ffffff' : '#111a16';
   h.setRoute = (a, b, poly) => {
     h.layers.forEach((l) => l.remove()); h.layers = [];
     const pts = [];
@@ -182,11 +185,26 @@ function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
     if (b) { h.layers.push(L.marker([b.lat, b.lng], { icon: icon('d') }).addTo(map)); pts.push([b.lat, b.lng]); }
     if (road && road.length > 1) {
       // The actual road path.
-      h.layers.push(L.polyline(road, { color: '#ffffff', weight: 8, opacity: .9, lineCap: 'round', lineJoin: 'round' }).addTo(map));
-      h.layers.push(L.polyline(road, { color: '#0f7b4a', weight: 5, opacity: .95, lineCap: 'round', lineJoin: 'round' }).addTo(map));
+      h.layers.push(L.polyline(road, { color: dark ? '#000' : '#fff', weight: 9, opacity: .9, lineCap: 'round', lineJoin: 'round' }).addTo(map));
+      h.layers.push(L.polyline(road, { color: INK, weight: 4.5, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(map));
       map.fitBounds(road, { padding: [36, 36] });
     } else if (pts.length === 2) { h.layers.push(L.polyline(pts, { color: '#0f7b4a', weight: 4, opacity: .55, dashArray: '2 9', lineCap: 'round' }).addTo(map)); map.fitBounds(pts, { padding: [36, 36] }); }
     else if (pts.length === 1) map.setView(pts[0], 14);
+  };
+  // Hexagonal search area around the pickup; cells with a free cab are stronger.
+  h.setHexes = (hexes) => {
+    h.hexLayers.forEach((l) => l.remove()); h.hexLayers = [];
+    (hexes || []).forEach((x, i) => {
+      const poly = L.polygon(x.corners, { color: '#0f7b4a', weight: x.cabs ? 2 : 1, opacity: x.cabs ? .9 : .35, fillColor: '#0f7b4a',
+        fillOpacity: x.cabs ? .28 : Math.max(.03, .12 - x.ring * .025), interactive: false, className: 'hexcell' }).addTo(map);
+      const el = poly.getElement(); if (el) el.style.animationDelay = `${x.ring * 140 + (i % 6) * 15}ms`;
+      h.hexLayers.push(poly);
+    });
+  };
+  // Free cabs around (rough positions).
+  h.setCabs = (cabs) => {
+    h.cabLayers.forEach((l) => l.remove()); h.cabLayers = [];
+    (cabs || []).forEach((c) => h.cabLayers.push(L.marker([c.lat, c.lng], { icon: L.divIcon({ className: '', html: `<div class="cab">${ic(c.type === 'bike' ? 'bolt' : 'car')}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false }).addTo(map)));
   };
   h.setCar = (p) => {
     if (!p) return;

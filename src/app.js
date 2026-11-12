@@ -1222,7 +1222,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v6.db'), 
     };
     const shuffle = (a) => a.map((v) => [crypto.randomInt(1 << 30), v]).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
     const months = []; let carry = [];
-    for (const [month, list] of [...byMonth.entries()].sort()) {
+    for (const [month, list] of [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
       const m = { month, ...avgOf(list) };
       if (month === thisMonth) {
         m.comments = null; m.note = 'Comments for this month appear after the month ends.';

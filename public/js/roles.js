@@ -8,46 +8,103 @@ function renderRider(app) {
   if (S.trip) return renderRiderTrip(app, S.trip);
   const b = S.booking;
   app.innerHTML = `
-    <div id="hmap" class="map"></div>
-    ${todoCard()}
-    ${S.me.cancelDues ? `<div class="card warn">${ic('wallet')} ${rs(S.me.cancelDues)} cancellation fee from an earlier booking will be added to your next ride.</div>` : ''}
-    <div class="card">
+    <div id="hmap" class="map hero-map"></div>
+    <div class="card sheet-card">
       <h2>Where to?</h2>
       <div class="route">
         <button id="pick-src"><span class="dotp"></span><span class="t ${b.src ? '' : 'ph'}">${esc(b.src ? b.src.name : 'Finding your location…')}</span>${pinTag(b.src)}</button>
         <button id="pick-dst"><span class="dotd"></span><span class="t ${b.dst ? '' : 'ph'}">${esc(b.dst ? b.dst.name : 'Choose destination')}</span>${pinTag(b.dst)}</button>
       </div>
-      <div class="toggle"><span>${ic('users')} Booking for someone else</span><label class="switch"><input type="checkbox" id="for-guest" ${b.forGuest ? 'checked' : ''}><i></i></label></div>
-      <div id="guest-box" ${b.forGuest ? '' : 'hidden'}>
+      <div class="optchips"><button id="for-guest" class="${b.forGuest ? 'on' : ''}">${ic('users')}For someone else</button><button id="pet" class="${b.pet ? 'on' : ''}">${ic('paw')}With a pet</button></div>
+      <div id="guest-box" ${b.forGuest ? '' : 'hidden'} style="margin-top:10px">
         <select id="g-sel"><option value="">New person…</option></select>
         <div id="g-new" class="grid2" style="margin-top:8px"><input id="g-name" placeholder="Their name" value="${esc((b.guest && b.guest.name) || '')}"><input id="g-phone" placeholder="Their mobile (optional)" inputmode="numeric" value="${esc((b.guest && b.guest.phone) || '')}"></div>
         <p class="muted small" style="margin:6px 0 0">Set the pickup to where they are.</p>
       </div>
-      <div class="toggle"><span>${ic('paw')} Travelling with a pet</span><label class="switch"><input type="checkbox" id="pet" ${b.pet ? 'checked' : ''}><i></i></label></div>
-      <button id="see-fares" class="btn block" ${b.src && b.dst ? '' : 'disabled'}>See fares</button>
+      <button id="see-fares" class="btn block" ${b.src && b.dst ? '' : 'disabled'}>See cabs and fares</button>
     </div>
+    ${todoCard()}
+    ${S.me.cancelDues ? `<div class="card warn">${ic('wallet')} ${rs(S.me.cancelDues)} cancellation fee from an earlier booking will be added to your next ride.</div>` : ''}
     <div id="est"></div><div id="quote"></div>`;
   S.map = makeMap($('#hmap'), { src: b.src, dst: b.dst, polyline: S.estimate && S.estimate.route.polyline });
   if (b.src) S.lastSeen = b.src;
+  if (S.nearby) { S.map.setHexes(S.nearby.hexes); S.map.setCabs(S.nearby.cabs); }
+  else if (b.src) api('GET', `/api/drivers/nearby?lat=${b.src.lat}&lng=${b.src.lng}`).then((cabs) => { if (S.map && !S.nearby) S.map.setCabs(cabs); }).catch(() => {});
   bindTodos(app);
-  const setPoint = (k) => (p) => { b[k] = p; b.autoFailed = false; S.estimate = null; S.quote = null; render(); };
+  const setPoint = (k) => (p) => { b[k] = p; b.autoFailed = false; S.estimate = null; S.nearby = null; S.quote = null; render(); };
   $('#pick-src').onclick = () => placePicker('Pickup point', setPoint('src'));
   $('#pick-dst').onclick = () => placePicker('Destination', setPoint('dst'));
-  $('#pet').onchange = (e) => { b.pet = e.target.checked; S.quote = null; $('#quote').innerHTML = ''; };
-  $('#for-guest').onchange = (e) => { b.forGuest = e.target.checked; $('#guest-box').hidden = !b.forGuest; if (b.forGuest) loadGuests(); };
+  $('#pet').onclick = () => { b.pet = !b.pet; S.quote = null; S.nearby = null; S.estimate = null; b.autoFailed = false; render(); };
+  $('#for-guest').onclick = () => { b.forGuest = !b.forGuest; $('#for-guest').classList.toggle('on', b.forGuest); $('#guest-box').hidden = !b.forGuest; if (b.forGuest) loadGuests(); };
   if (b.forGuest) loadGuests();
   // Pickup is picked automatically from GPS (shown with its DIGIPIN).
   if (!b.src && !b.gpsTried) { b.gpsTried = true; myLocation().then(setPoint('src')).catch(() => { const t = $('#pick-src .t'); if (t) t.textContent = 'Choose pickup point'; }); }
   const loadFares = async (scroll) => {
-    S.estimate = await api('POST', '/api/trips/estimate', { src: pointBody(b.src), dst: pointBody(b.dst) });
-    if (S.map) S.map.setRoute(b.src, b.dst, S.estimate.route.polyline); // draw the road path
+    const body = { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet };
+    [S.estimate, S.nearby] = await Promise.all([api('POST', '/api/trips/estimate', body), api('POST', '/api/trips/nearby', body).catch(() => ({ options: [], hexes: [], cabs: [], searchedRings: 0 }))]);
+    if (S.map) { S.map.setHexes(S.nearby.hexes); S.map.setRoute(b.src, b.dst, S.estimate.route.polyline); S.map.setCabs(S.nearby.cabs); }
     showEstimate(); if (scroll) $('#est').scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   $('#see-fares').onclick = run(() => loadFares(true));
-  // As soon as both ends are known, fetch the road route and fares without waiting for a tap.
+  // As soon as both ends are known, fetch the road route, nearby cabs and fares without waiting for a tap.
   if (b.src && b.dst && !S.estimate && !b.loading && !b.autoFailed) { b.loading = true; loadFares(false).catch((e) => { b.autoFailed = true; toast(e.message, true); }).finally(() => { b.loading = false; }); }
   if (S.estimate) showEstimate();
   if (S.quote) showQuote();
+}
+
+function guestBody() {
+  const b = S.booking;
+  if (!b.forGuest) return undefined;
+  return $('#g-sel').value ? { id: Number($('#g-sel').value) } : { name: $('#g-name').value, phone: $('#g-phone').value };
+}
+
+// Olub finds the cab: confirm the vehicle type, then the nearest driver is asked.
+function matchSheet(o) {
+  const b = S.booking; b.payTiming = b.payTiming || 'end';
+  const sh = sheet(`Request ${/^[aeiou]/i.test(o.label) ? 'an' : 'a'} ${o.label}`, `
+    <div class="between"><div><div class="bignum">${rs(o.riderPays)}</div><div class="muted small">incl. GST and ${rs(o.platformFee)} Olub fee</div></div>
+      <div class="vi" style="width:56px;height:56px;border-radius:18px;background:var(--soft);color:var(--brand);display:grid;place-items:center">${ic(VEH_ICON[o.type])}</div></div>
+    <table class="fare" style="margin-top:10px"><tr><td>${ic('car')} Cab comes to you</td><td>${o.pickupKm} km · ${o.awayMin} min</td></tr>
+      <tr><td>${ic('nav')} Your trip</td><td>${o.tripKm} km</td></tr>
+      <tr class="sub"><td colspan="2">You pay for both distances at the ${esc(o.label)} rate. The Olub fee is ${rs(S.cfg.platformFee)} up to ${S.cfg.platformFeeLongKm} km in total, ${rs(S.cfg.platformFeeLong)} beyond.</td></tr></table>
+    <p class="muted small" style="margin-top:8px">${ic('target')} We ask the nearest free ${esc(o.label.toLowerCase())} first. If they do not accept in ${S.cfg.matchOfferSeconds} seconds, the next nearest is asked. The fare is updated for that cab's distance.</p>
+    <h3>When will you pay?</h3>
+    <div class="seg" id="mpay"><button data-p="start" class="${b.payTiming === 'start' ? 'on' : ''}">At the start</button><button data-p="end" class="${b.payTiming === 'end' ? 'on' : ''}">At the end</button></div>
+    <button id="mgo" class="btn block">Find my cab</button>`);
+  $$('#mpay button', sh.el).forEach((x) => { x.onclick = () => { b.payTiming = x.dataset.p; $$('#mpay button').forEach((y) => y.classList.toggle('on', y === x)); }; });
+  $('#mgo', sh.el).onclick = run(async () => {
+    await api('POST', '/api/trips', { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming, match: { vehicleType: o.type } });
+    sh.close(); S.quote = null; S.estimate = null; S.nearby = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
+    await refreshTrip(); render(); window.scrollTo(0, 0);
+  });
+}
+
+function showEstimate() {
+  const e = S.estimate; const b = S.booking; const n = S.nearby || { options: [] };
+  const byType = Object.fromEntries(e.options.map((o) => [o.type, o]));
+  $('#est').innerHTML = `
+    <div class="card"><div class="between"><h2 style="margin:0">Cabs near you</h2><span class="chip ${e.route.traffic === 'Light' ? '' : 'warn'}">${ic('clock')}${e.route.etaMin} min · ${esc(e.route.traffic)}</span></div>
+      <p class="muted small" style="margin:4px 0 6px">${e.route.distanceKm} km ${e.route.source === 'estimate' ? '(estimated)' : 'by road'} · fares include the cab coming to you, GST and the Olub fee</p>
+      ${n.options.map((o) => `<div class="opt"><div class="vi">${ic(VEH_ICON[o.type])}</div><div class="grow"><b>${esc(o.label)}</b> ${o.rating.count ? `<span class="stars small">${ic('star', 'fill')}${o.rating.average.toFixed(1)}</span>` : ''}
+        <div class="away">${o.awayKm} km away · ${o.awayMin} min${o.count > 1 ? ` · ${o.count} nearby` : ''}</div></div>
+        <div style="text-align:right"><b class="p">${rs(o.riderPays)}</b><br><button class="btn req" data-match="${o.type}">Request</button></div></div>`).join('')
+      || `<div class="empty" style="padding:16px 6px">${ic('search')}<div>No free cab within about ${S.cfg.platformFeeLongKm + 2} km right now${b.pet ? ' that takes pets' : ''}.<br>You can still book a cab standing in front of you.</div></div>`}
+    </div>
+    <div class="card"><h2>Cab right in front of you?</h2>
+      <p class="muted small" style="margin:0 0 4px">No waiting and no charge for coming to you. Typical fares for this trip:</p>
+      <div class="chips" style="margin:8px 0">${e.options.map((o) => `<span class="chip grey">${esc(o.label)} ≈ ${rs(o.riderPays)}</span>`).join('')}</div>
+      <button id="scan" class="btn accent block">${ic('camera')}Scan driver's QR</button>
+      <div class="seg" style="margin-top:14px" id="mode"><button data-m="plate" class="${b.mode === 'plate' ? 'on' : ''}">Type number plate</button><button data-m="phone" class="${b.mode === 'phone' ? 'on' : ''}">Driver's mobile / Olub ID</button></div>
+      <div class="row" style="margin-top:10px"><div class="plate-in grow ${b.mode === 'phone' ? 'phone' : ''}" id="plate-wrap"><span class="ind">IND</span>
+        <input id="drv" value="${esc(b.driver)}" placeholder="${b.mode === 'plate' ? 'KA01AB1234' : '98765 43210'}" autocapitalize="characters" autocomplete="off"></div>
+        <button id="find" class="btn">${ic('search')}</button></div></div>`;
+  void byType;
+  $$('[data-match]').forEach((x) => { x.onclick = () => matchSheet(n.options.find((o) => o.type === x.dataset.match)); });
+  $$('#mode button').forEach((x) => { x.onclick = () => { b.mode = x.dataset.m; b.driver = ''; showEstimate(); }; });
+  $('#scan').onclick = () => scanSheet((code) => { b.driver = code; getQuote(); });
+  const go = run(async () => { b.driver = $('#drv').value; await getQuote(true); });
+  $('#find').onclick = go;
+  $('#drv').onkeydown = (ev) => { if (ev.key === 'Enter') go(ev); };
 }
 
 async function loadGuests() {
@@ -56,25 +113,6 @@ async function loadGuests() {
   const gs = await api('GET', '/api/guests').catch(() => []);
   sel.innerHTML = `<option value="">New person…</option>${gs.map((g) => `<option value="${g.id}">${esc(g.name)} · ${esc(g.publicId)}</option>`).join('')}`;
   sel.onchange = () => { $('#g-new').hidden = !!sel.value; };
-}
-
-function showEstimate() {
-  const e = S.estimate; const b = S.booking;
-  $('#est').innerHTML = `<div class="card">
-    <div class="between"><h2 style="margin:0">Fares for this trip</h2><span class="chip ${e.route.traffic === 'Light' ? '' : 'warn'}">${ic('clock')}${e.route.etaMin} min · ${esc(e.route.traffic)} traffic</span></div>
-    <p class="muted small" style="margin:4px 0 8px">${e.route.distanceKm} km · ${e.route.source === 'google-live-traffic' ? 'by road, live Google traffic' : e.route.source === 'osm-road' ? 'by road · traffic estimated by time of day' : 'distance and traffic estimated'} · incl. GST and Olub fee</p>
-    ${e.options.map((o) => `<div class="opt"><div class="vi">${ic(VEH_ICON[o.type])}</div><div class="grow"><b>${esc(o.label)}</b><div class="muted small">${rs(o.perKm)}/km${o.tollTotal ? ` · tolls ${rs(o.tollTotal)}` : ''}</div></div><b class="p">≈ ${rs(o.riderPays)}</b></div>`).join('')}
-    <p class="muted small" style="margin-top:8px">${esc(e.note)}</p>
-    <button id="scan" class="btn accent block">${ic('camera')}Scan driver's QR</button>
-    <div class="seg" style="margin-top:14px" id="mode"><button data-m="plate" class="${b.mode === 'plate' ? 'on' : ''}">Type number plate</button><button data-m="phone" class="${b.mode === 'phone' ? 'on' : ''}">Driver's mobile / Olub ID</button></div>
-    <div class="row" style="margin-top:10px"><div class="plate-in grow ${b.mode === 'phone' ? 'phone' : ''}" id="plate-wrap"><span class="ind">IND</span>
-      <input id="drv" value="${esc(b.driver)}" placeholder="${b.mode === 'plate' ? 'KA01AB1234' : '98765 43210'}" autocapitalize="characters" autocomplete="off"></div>
-      <button id="find" class="btn">${ic('search')}</button></div></div>`;
-  $$('#mode button').forEach((x) => { x.onclick = () => { b.mode = x.dataset.m; b.driver = ''; showEstimate(); }; });
-  $('#scan').onclick = () => scanSheet((code) => { b.driver = code; getQuote(); });
-  const go = run(async () => { b.driver = $('#drv').value; await getQuote(true); });
-  $('#find').onclick = go;
-  $('#drv').onkeydown = (ev) => { if (ev.key === 'Enter') go(ev); };
 }
 
 async function getQuote(rethrow) {
@@ -101,10 +139,8 @@ function showQuote() {
   </div>`;
   $$('#payt button').forEach((x) => { x.onclick = () => { b.payTiming = x.dataset.p; $$('#payt button').forEach((y) => y.classList.toggle('on', y === x)); }; });
   $('#request').onclick = run(async () => {
-    let guest;
-    if (b.forGuest) guest = $('#g-sel').value ? { id: Number($('#g-sel').value) } : { name: $('#g-name').value, phone: $('#g-phone').value };
-    await api('POST', '/api/trips', { driver: b.driver, src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest, payTiming: b.payTiming });
-    S.quote = null; S.estimate = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
+    await api('POST', '/api/trips', { driver: b.driver, src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming });
+    S.quote = null; S.estimate = null; S.nearby = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
     await refreshTrip(); render(); window.scrollTo(0, 0);
   });
 }
@@ -125,7 +161,7 @@ function payBlock(t, forDriver) {
 function renderRiderTrip(app, t) {
   const f = t.final || t.quote;
   const head = {
-    requested: ['Waiting for the driver to accept…', `Asking ${esc(t.driver.name)} (${esc(t.driver.vehicleNumber)})`],
+    requested: t.matched ? ['Finding your cab…', `Asking the nearest driver, ${t.pickupKm} km away. If there is no answer in ${S.cfg.matchOfferSeconds} seconds we ask the next one.`] : ['Waiting for the driver to accept…', `Asking ${esc(t.driver.name)} (${esc(t.driver.vehicleNumber)})`],
     accepted: ['Driver accepted', 'Get in, then tell the driver this code.'],
     started: ['On the way', t.lateMin ? `Running ${t.lateMin} min late` : `Reaching in about ${Math.max(1, Math.round((t.expectedEndAt - Date.now()) / 60000))} min`],
     completed: [t.paidAt ? 'You have arrived' : 'You have arrived — please pay', `${esc(t.dst.name)}`],
@@ -203,7 +239,7 @@ function renderDriver(app) {
       ${S.requests.map((t) => `<div class="card flat" style="margin:12px 0 0">
         <div class="between"><b>${esc(t.guest ? `${t.guest.name} (guest of ${t.rider.name})` : t.rider.name)}</b>${starsHtml(t.rider.rating)}</div>
         <div class="route" style="pointer-events:none"><button><span class="dotp"></span><span class="t">${esc(t.src.name)}</span>${pinTag(t.src)}</button><button><span class="dotd"></span><span class="t">${esc(t.dst.name)}</span>${pinTag(t.dst)}</button></div>
-        <div class="chips"><span class="chip grey">${t.distanceKm} km · ${t.etaMin} min</span>${t.pet ? `<span class="chip warn">${ic('paw')}With a pet</span>` : ''}<span class="chip grey">Pays at the ${esc(t.payTiming)}</span></div>
+        <div class="chips"><span class="chip grey">${t.distanceKm} km · ${t.etaMin} min</span>${t.matched ? `<span class="chip warn">${ic('target')}Pickup is ${t.pickupKm} km away — paid for</span>` : ''}${t.pet ? `<span class="chip warn">${ic('paw')}With a pet</span>` : ''}<span class="chip grey">Pays at the ${esc(t.payTiming)}</span></div>
         <div class="between" style="margin-top:10px"><div><div class="muted small">You keep</div><div class="bignum" style="font-size:26px">${rs(t.quote.driverFare)}</div></div>
           <div class="row"><button class="btn ghost" data-rej="${t.id}">Decline</button><button class="btn" data-acc="${t.id}">Accept</button></div></div></div>`).join('')
       || `<div class="empty">${d.online ? `<div class="radar" style="width:60px;height:60px">${ic('car')}</div><div>Waiting for customers…</div>` : `${ic('car')}<div>You are offline.</div>`}</div>`}</div>
@@ -345,7 +381,7 @@ function renderDriverTrip(app, t) {
 }
 
 // ======================= ADMIN =======================
-const ADMIN_TABS = [['compliance', 'Compliance'], ['drivers', 'Driver KYC'], ['authority', 'Police / RTO'], ['privacy', 'Privacy requests'], ['feedback', 'Feedback'], ['users', 'People & audit'], ['rates', 'Rates'], ['calamity', 'Rain / calamity'], ['tolls', 'Tolls'], ['outbox', 'Messages']];
+const ADMIN_TABS = [['compliance', 'Compliance'], ['demo', 'Demo data'], ['drivers', 'Driver KYC'], ['authority', 'Police / RTO'], ['privacy', 'Privacy requests'], ['feedback', 'Feedback'], ['users', 'People & audit'], ['rates', 'Rates'], ['calamity', 'Rain / calamity'], ['tolls', 'Tolls'], ['outbox', 'Messages']];
 
 async function renderAdmin(app) {
   if (!ADMIN_TABS.some((t) => t[0] === S.sub)) S.sub = 'compliance';
@@ -362,6 +398,18 @@ const kv = (o) => `<dl class="kv">${Object.entries(o).map(([k, v]) => `<dt>${esc
 const hm = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 
 const ADMIN = {
+  async demo(pane) {
+    const d = await api('GET', '/api/admin/demo');
+    const note = { 9000000101: 'on a ride right now', 9000000102: 'has a ride request waiting', 9000000103: 'new, awaiting verification', 9000000104: 'wallet below ₹100',
+      9000000201: 'most trips; open privacy complaint', 9000000202: 'waiting for a driver to accept', 9000000203: 'in a ride right now', 9000000204: 'had a cancellation fee' };
+    pane.innerHTML = `<div class="card"><h2>Demo data</h2>
+      <p class="muted">Loads 4 drivers, 4 customers and 15 trips around Lucknow: completed, cancelled by either side, declined, one waiting for a driver and one in progress — with ratings, wallet history, invoices, a toll and a guest booking.</p>
+      ${d.loaded ? `<p class="chip">${ic('check')}Demo data is loaded</p>` : `<button id="dload" class="btn block">${ic('download')}Load demo data</button>`}</div>
+      ${d.loaded ? `<div class="card"><h2>Log in as…</h2><p class="muted small">Log out, enter one of these numbers, and use the code shown on screen.</p>
+        <table class="logins">${d.logins.map((u) => `<tr><td>${ic(u.role === 'driver' ? 'car' : 'user')}</td><td><b>${esc(u.name)}</b><div class="muted small">${esc(note[u.phone] || '')}</div></td><td style="text-align:right;font-family:ui-monospace,monospace"><b>${esc(u.phone)}</b><div class="muted small">${esc(u.publicId)}</div></td></tr>`).join('')}</table></div>` : ''}`;
+    if ($('#dload')) $('#dload').onclick = run(async () => { const r = await api('POST', '/api/admin/demo'); toast(r.message); render(); });
+  },
+
   async compliance(pane) {
     const c = await api('GET', '/api/admin/compliance');
     pane.innerHTML = `

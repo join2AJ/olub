@@ -1,6 +1,6 @@
 # Olub
 
-**Book the cab in front of you.** You can see an empty cab or auto waiting right there, but the big apps send it to someone else and add surge pricing. With Olub you scan that cab's QR (or type its number), see a fair fare, and go.
+**Book the cab in front of you.** You can see an empty cab or auto waiting right there, but the big apps send it to someone else and add surge pricing. With Olub you scan that cab's QR (or type its number), see a fair fare, and go. If no cab is in front of you, Olub finds the nearest free one.
 
 - Olub keeps **₹5 a trip up to 10 km and ₹15 beyond** (half in rain or a natural calamity), plus a monthly charge of ₹937 or 20% of the driver's earnings, whichever is less. The fare is the driver's.
 - Olub only **connects** the customer and the driver, tracks the ride and shows the fare openly. It does not provide the ride.
@@ -40,6 +40,7 @@ Open `http://localhost:3000` in a browser to use the same app without installing
 | Setting | What it does |
 |---|---|
 | `OLUB_ADMIN_PHONES` | Mobile numbers that are admins (default `9999999999`) |
+| `OLUB_DEMO=1` | Load the demo drivers, customers and trips at start-up (useful on hosts that wipe data on restart) |
 | `GOOGLE_MAPS_API_KEY` | Live traffic and Google address search. Without it the app uses free OpenStreetMap road routes and search, and estimates traffic by time of day |
 | `OLUB_OSRM_URL`, `OLUB_PHOTON_URL` | Your own OpenStreetMap routing / search servers (default: the free public ones, which have no uptime promise). `OLUB_OSM=0` turns them off |
 | `OLUB_DATA_KEY` | 64 hex characters; encrypts KYC documents. Required in production |
@@ -52,6 +53,27 @@ Open `http://localhost:3000` in a browser to use the same app without installing
 | `OLUB_LEA_AUTO_DAYS`, `OLUB_DSR_AUTO_DAYS` | Days before authority / privacy requests are answered automatically (3 and 5) |
 
 To try it: open two browser windows (or two phones). Sign up as a driver in one, as a customer in the other. Login codes appear on screen in test mode. Log in as `9999999999` for the admin console.
+
+## Demo data
+
+Admin → **Demo data** → **Load demo data** adds 4 drivers, 4 customers and 15 trips around Lucknow: completed, cancelled by either side, declined, one waiting for a driver and one in progress, with ratings, wallet history, invoices, a toll and a guest booking. Log out and sign in with any of these numbers (the code shows on screen):
+
+| Role | Name | Mobile | What to look at |
+|---|---|---|---|
+| Driver | Ramesh Yadav (sedan) | 9000000101 | On a ride right now; earnings, monthly ratings with comments |
+| Driver | Imran Khan (auto) | 9000000102 | A ride request waiting to accept or decline |
+| Driver | Sunita Verma (hatchback) | 9000000103 | New, awaiting verification; free to be matched |
+| Driver | Gurpreet Singh (SUV) | 9000000104 | Wallet below ₹100, cannot go online |
+| Customer | Priya Sharma | 9000000201 | Most trips; an open privacy complaint |
+| Customer | Arjun Mehta | 9000000202 | Waiting for a driver to accept; a guest booking |
+| Customer | Fatima Ali | 9000000203 | In a ride right now (tracking, SOS) |
+| Customer | Rohan Gupta | 9000000204 | A cancelled ride whose fee was paid with the next one |
+
+## Two ways to get a cab
+
+**The cab is in front of you.** Scan its QR or type its number. No waiting, and nothing is charged for the cab coming to you.
+
+**No cab in sight.** Olub searches around the pickup in hexagons, ring by ring (about 1 km per ring, up to about 12 km), and shows the nearest free cab of each type with its fare. The nearest driver is asked first; if they decline or do not answer in 45 seconds the next nearest is asked. The fare covers **the cab's distance to you plus your trip**, both at that vehicle's per-km rate, and the Olub fee is based on the total: a cab 10 km away for a 1 km trip is 11 km, so the fee is ₹15.
 
 ## How a ride works
 
