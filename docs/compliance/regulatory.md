@@ -10,8 +10,8 @@ This is a working checklist, not legal advice. The main rule set is the **Motor 
 |---|---|---|
 | Driver works at most 12 hours a day, then 10 hours rest | Online and on-trip time is counted. Warnings at 2 h, 1 h and 30 min. At 12 hours the driver is taken offline (after finishing the current ride) and cannot go online for 10 hours | Driver home → Driving hours; Admin → Compliance |
 | Hours on all apps count together | Driver declares hours driven on other apps when going online. Olub cannot check this | "Before you go online" sheet |
-| Driver keeps at least 80% of the fare | Olub takes ₹5 flat, about 1% of a typical fare. The exact share is shown live | Admin → Compliance; Driver → Earnings |
-| Cancellation fee at most 10% of fare or ₹100 | Olub charges no cancellation fee | — |
+| Driver keeps at least 80% of the fare | Olub takes ₹5 per trip up to 10 km and ₹15 beyond, plus a monthly charge (₹937 or 20% of earnings, lower). The monthly charge is reduced by trip fees already paid, so the total never passes 20%. The exact share is shown live | Admin → Compliance; Driver → Earnings |
+| Cancellation fee at most 10% of fare or ₹100 | ₹5 / ₹15 to the side at fault; a customer never pays more than 10% of the fare; free for 2 minutes after booking | Cancel sheet; terms |
 | Fares are transparent | Line-by-line fare shown to both sides before the ride; rate card set by admin | Fare screens; Admin → Rates |
 | Driver identity and documents | Licence, RC, permit, insurance, KYC ID, photo; verified by a customer in person or an admin | Driver → Vehicle & documents; Admin → Driver KYC |
 | Valid insurance | Expiry date stored; an expired policy blocks going online; list of policies expiring in 30 days | Admin → Compliance |

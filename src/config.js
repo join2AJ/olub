@@ -7,10 +7,24 @@ const DAY = 24 * 3600 * 1000;
 module.exports = {
   DAY,
   // ---------- money ----------
-  PLATFORM_FEE: 5,               // Olub keeps only this per trip
-  PLATFORM_FEE_CALAMITY: 2.5,    // rain / natural calamity (admin toggles per state)
-  SUBSCRIPTION_ENABLED: process.env.OLUB_SUBSCRIPTION === '1',
-  SUBSCRIPTION_MONTHLY: 100,
+  PLATFORM_FEE: 5,               // per trip up to PLATFORM_FEE_LONG_KM (even a 0.01 km trip)
+  PLATFORM_FEE_LONG: 15,         // per trip longer than PLATFORM_FEE_LONG_KM
+  PLATFORM_FEE_LONG_KM: 10,
+  CALAMITY_FEE_FACTOR: 0.5,      // rain / natural calamity: half fee (₹2.5 / ₹7.5), admin toggles per state
+  PLATFORM_FEE_CALAMITY: 2.5,
+
+  // Cancellation: the same ₹5 / ₹15, charged to exactly one side — whoever the app finds at fault.
+  CANCEL_FREE_WINDOW_MIN: 2,     // customer can cancel free for this long after booking
+  CANCEL_CUSTOMER_CAP: { percent: 0.10, max: 100 },   // law: at most 10% of fare or ₹100 for the customer
+  // "Driver is not coming": after this long with no real progress towards the pickup, the driver is at fault.
+  CANCEL_DRIVER_GRACE_MIN: 2, CANCEL_PROGRESS_KM: 0.1, CANCEL_ARRIVED_KM: 0.15,
+
+  // Monthly charge per driver: ₹937 or 20% of what they earned that month, whichever is less.
+  MONTHLY_FEE_ENABLED: process.env.OLUB_MONTHLY_FEE !== '0',
+  MONTHLY_FEE_MAX: 937,
+  MONTHLY_FEE_SHARE: 0.20,
+  // Keep Olub's total take (trip fees + monthly charge) within the legal 20% of fares.
+  MONTHLY_FEE_RESPECT_LEGAL_CAP: process.env.OLUB_MONTHLY_STRICT_CAP !== '0',
   VERIFY_DISCOUNT: 10,           // rider who verifies a new driver in person
 
   // ---------- GST (confirm rates and treatment with your CA) ----------

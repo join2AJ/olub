@@ -10,6 +10,7 @@ function renderRider(app) {
   app.innerHTML = `
     <div id="hmap" class="map"></div>
     ${todoCard()}
+    ${S.me.cancelDues ? `<div class="card warn">${ic('wallet')} ${rs(S.me.cancelDues)} cancellation fee from an earlier booking will be added to your next ride.</div>` : ''}
     <div class="card">
       <h2>Where to?</h2>
       <div class="route">
@@ -84,7 +85,7 @@ function showQuote() {
   b.payTiming = b.payTiming || 'end';
   $('#quote').innerHTML = `<div class="card">
     ${driverCard(q.driver)}
-    ${q.calamity ? `<p class="chip warn" style="margin-top:10px">${ic('cloud')}${esc(q.calamity.reason)} — Olub fee reduced to ${rs(S.cfg.platformFeeCalamity)}</p>` : ''}
+    ${q.calamity ? `<p class="chip warn" style="margin-top:10px">${ic('cloud')}${esc(q.calamity.reason)} — Olub fee is halved</p>` : ''}
     <h3>Exact fare for this cab</h3>${fareTable(q.quote)}
     ${q.tolls.some((t) => t.status !== 'verified') ? '<p class="muted small" style="margin-top:6px">Tolls not yet confirmed by drivers use the state default.</p>' : ''}
     ${q.verifyOffer ? `<p class="chip" style="margin-top:8px;white-space:normal">${ic('shield')}Get ${rs(q.verifyOffer)} off: this driver is new — check their documents during the ride.</p>` : ''}
@@ -152,7 +153,7 @@ function renderRiderTrip(app, t) {
     ${commsBlock(t)}`;
   mountTripMap(t);
   const on = (id, fn) => { const el = $(id); if (el) el.onclick = run(fn); };
-  on('#cancel', async () => { await api('POST', `/api/trips/${t.id}/cancel`); S.trip = null; await refreshTrip(); render(); });
+  if ($('#cancel')) $('#cancel').onclick = () => cancelSheet(t);
   on('#im-safe', async () => { S.trip = await api('POST', `/api/trips/${t.id}/safe`); toast('Your contact has been told you are safe'); render(); });
   on('#verify', async () => {
     S.trip = await api('POST', `/api/trips/${t.id}/verify-driver`, { checks: { face: $('#c1').checked, vehicleNumber: $('#c2').checked, vehicleMatches: $('#c3').checked } });
@@ -249,7 +250,7 @@ function renderVehicle(app) {
       <div id="petbox" ${prefs.petsOk ? '' : 'hidden'}><label class="f">Extra charge for a pet (₹0–${S.cfg.maxPetCharge})</label><input id="v-petc" type="number" inputmode="numeric" value="${prefs.petCharge || 0}"></div>
     </div>
     <div class="card soft legal"><h3 style="margin-top:0">My safety pledge</h3>${S.legal.docs.driver_conduct.body.map((p) => `<p>${esc(p)}</p>`).join('')}
-      <h3>Liability</h3>${S.legal.docs.driver_terms.body.slice(2, 4).map((p) => `<p>${esc(p)}</p>`).join('')}</div>
+      <h3>Liability</h3>${S.legal.docs.driver_terms.body.slice(4, 6).map((p) => `<p>${esc(p)}</p>`).join('')}</div>
     <button id="v-save" class="btn block">Save and submit</button>`;
   $('#back').onclick = () => { S.sub = null; render(); };
   $('#v-pets').onchange = (e) => { $('#petbox').hidden = !e.target.checked; };
@@ -313,7 +314,7 @@ function renderDriverTrip(app, t) {
     $('#fit').onchange = sync; $('#otp').oninput = sync;
   }
   on('#start', async () => { S.trip = await api('POST', `/api/trips/${t.id}/start`, { otp: $('#otp').value, fitDeclaration: $('#fit').checked }); syncTracking(); render(); });
-  on('#cancel', async () => { await api('POST', `/api/trips/${t.id}/cancel`); S.trip = null; await refreshTrip(); render(); });
+  if ($('#cancel')) $('#cancel').onclick = () => cancelSheet(t);
   on('#complete', async () => { S.trip = await api('POST', `/api/trips/${t.id}/complete`, {}); S.me = await api('GET', '/api/me'); syncTracking(); render(); window.scrollTo(0, 0); });
   on('#gotpaid', async () => { S.trip = await api('POST', `/api/trips/${t.id}/pay`, { method: 'cash' }); render(); if (S.trip.paidAt && !S.trip.rated) ratingSheet(S.trip); });
   on('#inv', () => invoiceSheet(t.id));
@@ -480,7 +481,7 @@ const ADMIN = {
 
   async calamity(pane) {
     const cfg = await api('GET', '/api/config');
-    pane.innerHTML = `<div class="card"><h2>${ic('cloud')} Rain / calamity mode</h2><p class="muted small">While on, Olub charges ${rs(cfg.platformFeeCalamity)} instead of ${rs(cfg.platformFee)} per trip in that state.</p>
+    pane.innerHTML = `<div class="card"><h2>${ic('cloud')} Rain / calamity mode</h2><p class="muted small">While on, Olub's fee is halved in that state (${rs(cfg.platformFee / 2)} instead of ${rs(cfg.platformFee)}, ${rs(cfg.platformFeeLong / 2)} instead of ${rs(cfg.platformFeeLong)}).</p>
       <div class="list">${cfg.calamity.map((c) => `<div class="between"><span><b>${esc(c.state === '*' ? 'All India' : c.state)}</b> — ${esc(c.reason)}</span><button class="btn small ghost" data-off="${esc(c.state)}">Turn off</button></div>`).join('') || '<p class="muted">Normal everywhere.</p>'}</div>
       <div class="grid2" style="margin-top:10px"><input id="cs" placeholder="State (KA) or * for all" maxlength="4" autocapitalize="characters"><input id="cr" placeholder="Reason (Heavy rain)"></div>
       <button id="con" class="btn block">Turn on</button></div>`;

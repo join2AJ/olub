@@ -8,6 +8,12 @@ function experienceTier(completedTrips) {
   return C.EXPERIENCE_TIERS.find((t) => completedTrips >= t.minTrips);
 }
 
+/** Olub's fee: ₹5 up to 10 km, ₹15 beyond; half in calamity mode. */
+function platformFeeFor(distanceKm, calamity) {
+  const fee = distanceKm > C.PLATFORM_FEE_LONG_KM ? C.PLATFORM_FEE_LONG : C.PLATFORM_FEE;
+  return calamity ? round2(fee * C.CALAMITY_FEE_FACTOR) : fee;
+}
+
 function defaultTollFor(state) {
   return C.STATE_DEFAULT_TOLL[state] ?? C.DEFAULT_TOLL;
 }
@@ -44,13 +50,15 @@ function calculateFare(p) {
   const tollTotal = round2(tolls.reduce((s, t) => s + t.amount, 0));
 
   const driverFare = rideFare + waitCharge + petCharge + tollTotal;
-  const platformFee = p.calamity ? C.PLATFORM_FEE_CALAMITY : C.PLATFORM_FEE;
+  const platformFee = platformFeeFor(distanceKm, p.calamity);
   // GST: the platform fee is GST-inclusive; ride GST is charged on top of the ride (not on tolls).
   const gstRate = p.gstRate ?? C.RIDE_GST_RATE;
   const rideGst = Math.round((rideFare + waitCharge + petCharge) * gstRate); // rounded to the rupee
   const platformFeeGst = round2(platformFee - platformFee / (1 + C.PLATFORM_FEE_GST_RATE));
   const discount = Math.max(0, p.discount || 0);
-  const riderPays = round2(Math.max(0, driverFare + rideGst + platformFee - discount));
+  // Unpaid cancellation fee from an earlier booking, collected with this ride.
+  const dues = Math.max(0, round2(p.dues || 0));
+  const riderPays = round2(Math.max(0, driverFare + rideGst + platformFee + dues - discount));
 
   return {
     vehicleType: p.vehicleType,
@@ -78,7 +86,8 @@ function calculateFare(p) {
       totalGst: round2(rideGst + platformFeeGst),
     },
     // Taken from the driver's wallet when the trip ends (the rider pays the driver directly).
-    walletDeduction: round2(platformFee + rideGst),
+    dues,
+    walletDeduction: round2(platformFee + rideGst + dues),
     calamity: !!p.calamity,
     discount,
     riderPays,
@@ -87,4 +96,4 @@ function calculateFare(p) {
   };
 }
 
-module.exports = { calculateFare, experienceTier, defaultTollFor };
+module.exports = { calculateFare, experienceTier, defaultTollFor, platformFeeFor };

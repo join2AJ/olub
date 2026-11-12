@@ -75,7 +75,7 @@ test('full trip with every safety rule', async (t) => {
   // Booking for a guest, with a pet, by number plate.
   const booking = { driver: 'ka01ab1234', src: s.place('MG Road'), dst: s.place('Electronic City'), pet: true, guest: { name: 'Grandma Lakshmi' } };
   const q = await ok('POST', '/api/trips/quote', booking, rider);
-  assert.equal(q.quote.platformFee, 5);
+  assert.equal(q.quote.platformFee, 15, 'the test route is 20 km, so the fee is ₹15');
   assert.equal(q.quote.breakdown.petCharge, 40);
   assert.equal(q.quote.breakdown.waitCharge, (10 - 3) * 2, 'traffic delay comes from the maps provider');
   assert.equal(q.quote.breakdown.roadMultiplier, undefined, 'road condition is no longer part of the fare');
@@ -223,7 +223,7 @@ test('booking rules: profile must be complete, pets need a pet-friendly driver, 
   await ok('POST', '/api/admin/calamity', { state: 'DL', on: true, reason: 'Flooding' }, admin);
   await ok('PUT', '/api/admin/rates', { auto: { base: 35, perKm: 18, perWaitMin: 2, minFare: 40 } }, admin);
   const q = await ok('POST', '/api/trips/quote', booking, rider);
-  assert.equal(q.quote.platformFee, 2.5);
+  assert.equal(q.quote.platformFee, 7.5, 'half of ₹15 in calamity mode');
   assert.equal(q.quote.breakdown.perKm, 18, 'admin-set per-km rate is used');
 
   // Expired insurance blocks going online.
@@ -297,7 +297,7 @@ test('QR + DIGIPIN booking, wallet, GST invoice, pay at start, insights', async 
   const q = await ok('POST', '/api/trips/quote', booking, rider);
   assert.equal(q.driver.vehicleNumber, 'KA09ZZ0001');
   const fare = q.quote;
-  assert.equal(fare.riderPays, fare.driverFare + fare.taxes.rideGst + 5);
+  assert.equal(fare.riderPays, fare.driverFare + fare.taxes.rideGst + 15);
 
   const trip = await ok('POST', '/api/trips', booking, rider);
   assert.match(trip.dst.digipin, /^[2-9CFJKLMPT]{3}-[2-9CFJKLMPT]{3}-[2-9CFJKLMPT]{4}$/);
@@ -314,7 +314,7 @@ test('QR + DIGIPIN booking, wallet, GST invoice, pay at start, insights', async 
 
   // ₹5 (incl. GST) and the ride GST leave the driver's wallet when the trip ends.
   const w = await ok('GET', '/api/driver/wallet', null, driver);
-  assert.equal(w.balance, 500 - 5 - done.final.taxes.rideGst);
+  assert.equal(w.balance, 500 - 15 - done.final.taxes.rideGst);
   assert.deepEqual(w.txns.map((x) => x.type), ['ride_gst', 'platform_fee', 'topup']);
 
   // Invoices: the rider gets the ride invoice, the driver the platform-fee invoice.
@@ -322,7 +322,7 @@ test('QR + DIGIPIN booking, wallet, GST invoice, pay at start, insights', async 
   assert.equal(inv.total, done.final.riderPays);
   assert.equal(r2(inv.taxes[0].amount + inv.taxes[1].amount), done.final.taxes.rideGst);
   const dinv = await ok('GET', `/api/trips/${trip.id}/invoice`, null, driver);
-  assert.equal(dinv.total, 5);
+  assert.equal(dinv.total, 15);
   assert.equal(dinv.summary.youKeep, done.final.driverFare);
 
   const ins = await ok('GET', '/api/insights', null, driver);
@@ -451,4 +451,90 @@ test('police / RTO requests: government email only, auto-answer after 3 days, fl
   const actions = s.db.prepare("SELECT action FROM audit_log WHERE entity = 'lea'").all().map((a) => a.action);
   for (const a of ['lea.submitted', 'lea.email_verified', 'lea.released', 'lea.data_viewed', 'lea.vehicle_flagged', 'lea.wrong_code']) assert.ok(actions.includes(a), a);
   assert.equal(comp.auditLog.ok, true);
+});
+
+test('cancellation: one side pays, decided by the app', async (t) => {
+  const s = await setup();
+  t.after(() => s.server.close());
+  const { ok } = s;
+  const driver = await s.makeDriver('9876900001', 'KA09ZZ0009');
+  const rider = await s.makeRider('9876900002');
+  const booking = { driver: 'KA09ZZ0009', src: s.place('MG Road'), dst: s.place('Electronic City') };
+  const pickup = { lat: 12.9756, lng: 77.6066 };
+  const book = async (accept = true) => {
+    const trip = await ok('POST', '/api/trips', booking, rider);
+    if (accept) await ok('POST', `/api/trips/${trip.id}/accept`, {}, driver);
+    return trip;
+  };
+  const wallet = async () => (await ok('GET', '/api/driver/wallet', null, driver)).balance;
+  const dues = async () => (await ok('GET', '/api/me', null, rider)).cancelDues;
+
+  // 1. Before the driver accepts: free.
+  let trip = await book(false);
+  assert.equal((await ok('POST', `/api/trips/${trip.id}/cancel`, {}, rider)).cancellation.charged, null);
+  // 2. Inside 2 minutes of booking: free.
+  trip = await book(); s.time.t += MIN;
+  assert.equal((await ok('POST', `/api/trips/${trip.id}/cancel`, { reason: 'changed_plan' }, rider)).cancellation.fee, 0);
+  // 3. Customer changes their mind later: customer pays ₹15 (20 km trip), added to the next ride.
+  trip = await book(); s.time.t += 5 * MIN;
+  let c = (await ok('POST', `/api/trips/${trip.id}/cancel`, { reason: 'changed_plan' }, rider)).cancellation;
+  assert.deepEqual([c.charged, c.fee, c.youPay], ['rider', 15, 15]);
+  assert.equal(await dues(), 15);
+  assert.equal(await wallet(), 500, 'the driver is not charged');
+  // 4. "Driver is not coming" and GPS agrees (driver stays 2 km away): driver pays, customer does not.
+  trip = await book();
+  await ok('POST', `/api/trips/${trip.id}/location`, { lat: pickup.lat + 0.018, lng: pickup.lng }, driver);
+  s.time.t += 4 * MIN;
+  await ok('POST', `/api/trips/${trip.id}/location`, { lat: pickup.lat + 0.018, lng: pickup.lng }, driver);
+  c = (await ok('POST', `/api/trips/${trip.id}/cancel`, { reason: 'driver_not_coming' }, rider)).cancellation;
+  assert.deepEqual([c.charged, c.fee, c.youPay], ['driver', 15, 0]);
+  assert.equal(await wallet(), 485);
+  assert.equal(await dues(), 15, 'only one side is ever charged');
+  // 5. Same claim, but GPS shows the driver came to the pickup: customer pays.
+  trip = await book();
+  await ok('POST', `/api/trips/${trip.id}/location`, { lat: pickup.lat + 0.018, lng: pickup.lng }, driver);
+  s.time.t += 4 * MIN;
+  await ok('POST', `/api/trips/${trip.id}/location`, { lat: pickup.lat + 0.0005, lng: pickup.lng }, driver);
+  c = (await ok('POST', `/api/trips/${trip.id}/cancel`, { reason: 'driver_not_coming' }, rider)).cancellation;
+  assert.equal(c.charged, 'rider');
+  assert.equal(await dues(), 30);
+  // 6. Driver cancels after accepting: driver pays.
+  trip = await book(); s.time.t += 3 * MIN;
+  assert.equal((await ok('POST', `/api/trips/${trip.id}/cancel`, {}, driver)).cancellation.youPay, 15);
+  assert.equal(await wallet(), 470);
+
+  // The customer's unpaid fees ride along with their next fare and reach Olub through the driver's wallet.
+  trip = await book();
+  assert.equal(trip.quote.dues, 30);
+  await ok('POST', `/api/trips/${trip.id}/start`, { otp: trip.otp, fitDeclaration: true }, driver);
+  const done = await ok('POST', `/api/trips/${trip.id}/complete`, {}, driver);
+  assert.equal(done.final.riderPays, done.final.driverFare + done.final.taxes.rideGst + 15 + 30);
+  assert.equal(await dues(), 0);
+  assert.equal(await wallet(), 470 - 15 - 30 - done.final.taxes.rideGst);
+});
+
+test('monthly charge: lower of ₹937 and 20% of earnings, never taking Olub past 20% in total', async (t) => {
+  const s = await setup();
+  t.after(() => s.server.close());
+  const { ok } = s;
+  const driver = await s.makeDriver('9876910001', 'KA09ZZ0010');
+  const rider = await s.makeRider('9876910002');
+  for (let i = 0; i < 2; i++) {
+    const trip = await ok('POST', '/api/trips', { driver: 'KA09ZZ0010', src: s.place('MG Road'), dst: s.place('Hebbal') }, rider);
+    await ok('POST', `/api/trips/${trip.id}/accept`, {}, driver);
+    await ok('POST', `/api/trips/${trip.id}/start`, { otp: trip.otp, fitDeclaration: true }, driver);
+    await ok('POST', `/api/trips/${trip.id}/complete`, {}, driver);
+    await ok('POST', `/api/trips/${trip.id}/pay`, { method: 'cash' }, rider);
+  }
+  // 2 trips × ₹361 = ₹722 earned; trip fees ₹30. 20% = ₹144 → monthly charge ₹114, so the total is exactly 20%.
+  const preview = (await ok('GET', '/api/insights', null, driver)).monthly.thisMonth;
+  assert.deepEqual([preview.earned, preview.tripFees, preview.amount], [722, 30, 114]);
+  const before = (await ok('GET', '/api/driver/wallet', null, driver)).balance;
+  s.app.locals.tick();
+  assert.equal((await ok('GET', '/api/driver/wallet', null, driver)).balance, before, 'nothing is charged during the month');
+  s.time.t = Date.parse('2026-12-01T01:00:00Z'); s.app.locals.tick(); s.app.locals.tick();
+  const again = await s.login('9876910001');
+  const w = await ok('GET', '/api/driver/wallet', null, again);
+  assert.equal(w.balance, before - 114);
+  assert.equal(w.txns.filter((x) => x.type === 'monthly_fee').length, 1, 'charged once only');
 });

@@ -2,7 +2,7 @@
 
 **Book the cab in front of you.** You can see an empty cab or auto waiting right there, but the big apps send it to someone else and add surge pricing. With Olub you scan that cab's QR (or type its number), see a fair fare, and go.
 
-- Olub keeps **₹5 a trip** (₹2.5 in rain or a natural calamity). Everything else is the driver's.
+- Olub keeps **₹5 a trip up to 10 km and ₹15 beyond** (half in rain or a natural calamity), plus a monthly charge of ₹937 or 20% of the driver's earnings, whichever is less. The fare is the driver's.
 - Olub only **connects** the customer and the driver, tracks the ride and shows the fare openly. It does not provide the ride.
 - Calls and chat stay inside the app. Nobody sees anyone's mobile number.
 
@@ -10,7 +10,7 @@
 
 ## Install the Android app
 
-1. Download [`release/Olub-0.2.0-test.apk`](release/Olub-0.2.0-test.apk) on an Android phone (Android 7 or newer) and open it. Allow "install from this source" when asked.
+1. Download [`release/Olub-test.apk`](release/Olub-test.apk) on an Android phone (Android 7 or newer) and open it. Allow "install from this source" when asked.
 2. On first launch the app asks for your **Olub server address**. The app needs a running server (next section).
 
 This is a test build signed with a test key. It has been compiled and its screens tested in a browser, but **it has not yet been run on a real phone**. A Play Store build needs your own signing key.
@@ -46,7 +46,8 @@ Open `http://localhost:3000` in a browser to use the same app without installing
 | `OLUB_DEV_OTP=0` | Stop showing login codes on screen (once SMS is connected) |
 | `OLUB_RIDE_GST=0` | Turn off the 5% GST on rides |
 | `OLUB_LEGAL_NAME`, `OLUB_GSTIN`, `OLUB_ADDRESS`, `OLUB_GRIEVANCE` | Company details printed on invoices |
-| `OLUB_SUBSCRIPTION=1` | Turn on the ₹100/month driver subscription |
+| `OLUB_MONTHLY_FEE=0` | Turn off the monthly driver charge |
+| `OLUB_MONTHLY_STRICT_CAP=0` | Charge the full ₹937 / 20% even if trip fees + monthly charge would exceed 20% of earnings |
 | `OLUB_LEA_AUTO_DAYS`, `OLUB_DSR_AUTO_DAYS` | Days before authority / privacy requests are answered automatically (3 and 5) |
 
 To try it: open two browser windows (or two phones). Sign up as a driver in one, as a customer in the other. Login codes appear on screen in test mode. Log in as `9999999999` for the admin console.
@@ -101,7 +102,8 @@ To try it: open two browser windows (or two phones). Sign up as a driver in one,
 | Pet | The driver's own charge, if any |
 | Tolls | At cost. Verified amount if 6 drivers agree, otherwise the state default (₹70 unless set) |
 | GST | 5% on ride, waiting and pet charge |
-| Olub fee | ₹5 including GST (₹2.5 in calamity mode) |
+| Olub fee | ₹5 up to 10 km, ₹15 beyond, including GST (half in calamity mode) |
+| Earlier cancellation fee | Any unpaid cancellation fee from a previous booking |
 
 Default rate card (change it in Admin → Rates):
 
@@ -112,6 +114,20 @@ Default rate card (change it in Admin → Rates):
 | Hatchback | ₹50 | ₹13 | ₹1.5 | ₹80 |
 | Sedan | ₹60 | ₹16 | ₹2 | ₹100 |
 | SUV | ₹80 | ₹20 | ₹2.5 | ₹150 |
+
+## Cancellations and the monthly charge
+
+| Situation | Who pays | How much |
+|---|---|---|
+| Cancelled before the driver accepts | Nobody | — |
+| Customer cancels within 2 minutes of booking | Nobody | — |
+| Driver cancels after accepting | Driver (from wallet) | ₹5 up to 10 km, ₹15 beyond |
+| Customer cancels saying "driver is not coming", and GPS shows the driver made no progress towards the pickup for 2+ minutes | Driver (from wallet) | ₹5 / ₹15 |
+| Customer cancels for any other reason, or GPS shows the driver was coming or had arrived | Customer (added to their next ride) | ₹5 / ₹15, never more than 10% of the fare |
+
+Only one side is ever charged, and the app's decision is final.
+
+**Monthly charge.** On the 1st of each month every driver is charged ₹937 or 20% of what they earned the month before, whichever is less, from the wallet. Tolls are not counted as earnings. Trip fees already paid are subtracted first, so Olub's total take never passes 20% of earnings (the legal cap). Example: earned ₹10,000 with ₹300 of trip fees → ₹937. Earned ₹1,000 with ₹50 of trip fees → ₹150, making ₹200 in total.
 
 ## Things to know before real customers
 

@@ -5,7 +5,7 @@ const C = require('./config');
 // Plain-language terms shown in the app. Every acceptance is stored with the
 // version, time and IP (table `consents`) and written to the audit log.
 // NOTE: drafts — have a lawyer review before launch.
-const VERSION = '2026-11-12';
+const VERSION = '2026-11-12b';
 
 module.exports = {
   VERSION,
@@ -22,7 +22,8 @@ module.exports = {
       title: 'Customer terms',
       body: [
         'Olub is a connecting and tracking service only. The driver alone provides the ride.',
-        'The fare shown in the app is paid directly to the driver. Olub keeps a small platform fee per trip, which is shown separately.',
+        `The fare shown in the app is paid directly to the driver. Olub's fee is shown separately: ₹${C.PLATFORM_FEE} for trips up to ${C.PLATFORM_FEE_LONG_KM} km and ₹${C.PLATFORM_FEE_LONG} for longer trips.`,
+        `Cancelling is free within ${C.CANCEL_FREE_WINDOW_MIN} minutes of booking. After that a fee of ₹${C.PLATFORM_FEE} or ₹${C.PLATFORM_FEE_LONG} is charged to one side only. If you report that the driver is not coming and GPS shows it, the driver pays. Otherwise you pay, never more than ${C.CANCEL_CUSTOMER_CAP.percent * 100}% of the fare, added to your next ride. The app's decision is final.`,
         'In case of an accident, injury, loss or damage during a ride, claims are handled by the driver and the driver\'s vehicle insurance. Olub is not liable and will not pay compensation.',
         'You must add one trusted contact. Your live ride location is shared with that person, and they are alerted if your ride runs late.',
         'Follow the cab rules the driver has chosen (for example no smoking, no alcohol). Tell the driver before booking if you are travelling with a pet.',
@@ -33,7 +34,9 @@ module.exports = {
     driver_terms: {
       title: 'Driver terms & liability',
       body: [
-        'You are an independent driver. Olub only connects you with customers, helps track the ride, and shows the fare openly. Olub charges a small platform fee per trip; everything else is yours.',
+        `You are an independent driver. Olub only connects you with customers, helps track the ride, and shows the fare openly. Olub charges ₹${C.PLATFORM_FEE} per trip up to ${C.PLATFORM_FEE_LONG_KM} km and ₹${C.PLATFORM_FEE_LONG} for longer trips; the fare is yours.`,
+        `Each month Olub also charges ₹${C.MONTHLY_FEE_MAX} or ${C.MONTHLY_FEE_SHARE * 100}% of what you earned that month, whichever is less, from your wallet. Olub's total charges never exceed 20% of your earnings.`,
+        `If you cancel after accepting, or do not go to the pickup and the customer cancels for that reason, the ₹${C.PLATFORM_FEE} or ₹${C.PLATFORM_FEE_LONG} cancellation fee is taken from your wallet. The app's decision is final.`,
         'You must hold a valid driving licence, registration certificate, permits and motor insurance for your vehicle at all times, and keep them up to date in the app.',
         'If any accident happens, only your vehicle\'s insurance company covers the expenses. Under no condition will Olub be asked for compensation, and Olub is not liable for any loss, injury, death or damage.',
         'If a customer needs medical help because of an incident during your ride, you must make sure they get it — through your insurance company or by other means, including paying yourself or arranging treatment.',

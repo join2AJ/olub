@@ -80,3 +80,9 @@ test('traffic falls back to a time-of-day estimate when Google is unavailable', 
   const night = fallbackRoute({ lat: 12.9, lng: 77.6 }, { lat: 13, lng: 77.7 }, new Date('2026-11-12T21:00:00Z')); // 02:30 IST
   assert.equal(night.delayMin, 0);
 });
+
+test('Olub fee: ₹5 up to 10 km (even 0.01 km), ₹15 beyond; half in calamity mode', () => {
+  const fee = (km, calamity) => calculateFare({ ...base, distanceKm: km, calamity }).platformFee;
+  assert.deepEqual([fee(0.01), fee(10), fee(10.1), fee(40)], [5, 5, 15, 15]);
+  assert.deepEqual([fee(3, true), fee(25, true)], [2.5, 7.5]);
+});

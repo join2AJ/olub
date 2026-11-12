@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **12 Nov 2026, 08:33 IST**
+Last updated: **12 Nov 2026, 15:00 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 68 complete · 10 in progress · 6 planned · 10 need you
+**Totals:** 74 complete · 10 in progress · 6 planned · 10 need you
 
 ---
 
@@ -53,9 +53,15 @@ This is the single list of everything asked for Olub, and where each point stand
 | 3.7 | Tolls: ₹70 default, different by state | ✅ Complete | 11 Nov 2026, 21:10 | State values are placeholders to replace |
 | 3.8 | Toll first crossing: driver uploads photo and amount | ✅ Complete | 11 Nov 2026, 21:10 | |
 | 3.9 | Toll amount verified by 5 more drivers, then used in fares | ✅ Complete | 11 Nov 2026, 21:10 | |
-| 3.10 | Olub charges ₹5 a trip | ✅ Complete | 11 Nov 2026, 21:10 | |
-| 3.11 | ₹2.5 in rain or natural calamity | ✅ Complete | 11 Nov 2026, 21:10 | Admin switches it on per state |
-| 3.12 | ₹100 monthly fee, to be introduced later | ✅ Complete | 11 Nov 2026, 21:10 | Built and switched off |
+| 3.10 | Olub charges ₹5 a trip up to 10 km (even 0.01 km), ₹15 beyond | ✅ Complete | 12 Nov 2026, 15:00 | |
+| 3.11 | Half fee in rain or natural calamity (₹2.5 / ₹7.5) | ✅ Complete | 12 Nov 2026, 15:00 | Admin switches it on per state. Assumed the ₹15 fee is halved too |
+| 3.12 | Monthly charge per driver: ₹937 or 20% of the month's earnings, whichever is less | ✅ Complete | 12 Nov 2026, 15:00 | Replaces the ₹100 idea. Taken from the wallet on the 1st. Tolls are not counted as earnings |
+| 3.14 | Olub's total take stays within the legal 20% | ✅ Complete | 12 Nov 2026, 15:00 | Monthly charge is reduced by trip fees already paid, so trip fees + monthly charge never exceed 20%. One setting removes this |
+| 3.15 | Cancellation fee ₹5 (up to 10 km) or ₹15 (beyond) | ✅ Complete | 12 Nov 2026, 15:00 | |
+| 3.16 | Only one side pays; the app decides and its decision is final | ✅ Complete | 12 Nov 2026, 15:00 | Driver cancels → driver pays. Customer cancels → customer pays |
+| 3.17 | Customer says "driver is not coming" and GPS agrees → driver pays | ✅ Complete | 12 Nov 2026, 15:00 | Checked from the driver's GPS progress towards the pickup since accepting |
+| 3.18 | Free cancellation for 2 minutes after booking | ✅ Complete | 12 Nov 2026, 15:00 | Also free before the driver accepts |
+| 3.19 | Customer's cancellation fee capped at 10% of the fare | ✅ Complete | 12 Nov 2026, 15:00 | Added to the customer's next ride and passed to Olub through the driver's wallet |
 | 3.13 | Pet charge set by the driver | ✅ Complete | 12 Nov 2026, 02:20 | Goes fully to the driver |
 
 ## 4. Money, GST and invoices

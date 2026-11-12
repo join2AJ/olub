@@ -6,7 +6,8 @@ const express = require('express');
 
 const C = require('./config');
 const { openDb } = require('./db');
-const { calculateFare, experienceTier } = require('./fare');
+const { calculateFare, experienceTier, platformFeeFor } = require('./fare');
+const { haversineKm } = require('./geo');
 const { isValidPoint, pointToSegmentKm } = require('./geo');
 const Digipin = require('../public/js/digipin.js');
 const registerExtras = require('./extras');
@@ -35,7 +36,7 @@ const text = (s, max = 300) => String(s || '').trim().slice(0, max) || null;
 const DOC_KEYS = ['license', 'rc', 'kyc', 'vehicle', 'selfie'];
 const ID_PREFIX = { rider: 'OLB-C', driver: 'OLB-D', admin: 'OLB-A' };
 
-function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), clock = Date.now, maps = defaultMaps } = {}) {
+function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v3.db'), clock = Date.now, maps = defaultMaps } = {}) {
   const db = openDb(dbFile);
   const now = () => clock();
   const audit = createAudit(db, clock);
@@ -223,12 +224,12 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
       email: u.email, emailVerified: !!u.email_verified_at,
       dob: u.dob, age: ageFrom(u.dob), gender: u.gender,
       trusted: u.trusted_name ? { name: u.trusted_name, phone: u.trusted_phone, relation: u.trusted_relation } : null,
-      todo: todoFor(u), pendingConsents: pendingConsents(u), rating: ratingOf(u.id),
+      todo: todoFor(u), pendingConsents: pendingConsents(u), rating: ratingOf(u.id), cancelDues: u.cancel_dues,
     };
     if (u.role === 'driver') {
       const d = getDriver(u.id);
       out.driver = {
-        ...publicDriver(d, { full: true }), subscriptionUntil: d.subscription_until,
+        ...publicDriver(d, { full: true }),
         wallet: { balance: d.wallet_balance, min: C.WALLET_MIN_BALANCE, ok: d.wallet_balance >= C.WALLET_MIN_BALANCE },
         duty: dutyStatus(u.id), qr: `olub:D:${u.public_id}`, suspended: d.suspended_reason,
       };
@@ -336,7 +337,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
     const dst = resolvePoint(body.dst, 'Drop');
     const state = src.state || d.state;
     const route = await maps.getRoute(src, dst, { vehicleType: d.vehicle_type, when: new Date(now()) });
-    if (route.distanceKm < 0.2) throw httpError(400, 'Pickup and drop are too close');
+    if (route.distanceKm < 0.005) throw httpError(400, 'Pickup and drop are the same spot');
     const routeTolls = T.tollsOnRoute(db, src, dst);
     const cal = calamityFor(state);
     const rates = getRates()[d.vehicle_type];
@@ -346,7 +347,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
       waitMinutes: route.delayMin,
       tolls: T.tollsForVehicle(routeTolls, d.vehicle_type),
       petCharge: pet ? Math.min(C.MAX_PET_CHARGE, prefs.petCharge || 0) : 0,
-      calamity: !!cal,
+      calamity: !!cal, dues: rider.cancel_dues,
     });
     quote.driverCompletedTrips = d.completed_trips;
     quote.rates = rates;
@@ -364,7 +365,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
       completedTrips: quote.driverCompletedTrips ?? d.completed_trips, // locked at booking
       waitMinutes: trip.wait_minutes ?? quote.breakdown.waitMinutes,
       tolls: T.tollsForVehicle(tripTolls(trip), quote.vehicleType),
-      petCharge: quote.breakdown.petCharge,
+      petCharge: quote.breakdown.petCharge, dues: quote.dues,
       calamity: quote.calamity || !!calamityFor(trip.state),
       discount: trip.verify_discount ? C.VERIFY_DISCOUNT : 0,
     });
@@ -397,6 +398,32 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
     };
   }
 
+  /**
+   * Who pays for a cancellation? Exactly one side or nobody — the app's decision is final.
+   *  - before the driver accepts, or inside the free window: nobody
+   *  - driver cancels: driver
+   *  - customer cancels saying "driver is not coming" and GPS agrees: driver
+   *  - otherwise: customer (capped at 10% of the fare)
+   */
+  function cancellationVerdict(trip, by, reason) {
+    const quote = json(trip.quote);
+    const base = platformFeeFor(trip.distance_km, false);
+    const none = (why) => ({ fee: 0, charged: null, why });
+    if (trip.status === 'requested') return none('the driver had not accepted yet');
+    if (by === 'driver') return { fee: base, charged: 'driver', why: 'the driver cancelled after accepting' };
+    const sinceAccept = (now() - trip.accepted_at) / 60000;
+    if (reason === 'driver_not_coming' && sinceAccept >= C.CANCEL_DRIVER_GRACE_MIN) {
+      const arrived = trip.pickup_dist_last != null && trip.pickup_dist_last <= C.CANCEL_ARRIVED_KM;
+      const progressed = trip.pickup_dist_start != null && trip.pickup_dist_start - trip.pickup_dist_last >= C.CANCEL_PROGRESS_KM;
+      if (!arrived && !progressed) return { fee: base, charged: 'driver', why: 'GPS shows the driver was not coming to the pickup' };
+    }
+    if ((now() - trip.created_at) / 60000 < C.CANCEL_FREE_WINDOW_MIN) return none(`cancelled within ${C.CANCEL_FREE_WINDOW_MIN} minutes of booking`);
+    const cap = Math.min(C.CANCEL_CUSTOMER_CAP.max, Math.floor(quote.riderPays * C.CANCEL_CUSTOMER_CAP.percent));
+    const fee = Math.min(base, cap);
+    if (fee <= 0) return none('the fare is too small for a fee');
+    return { fee, charged: 'rider', why: reason === 'driver_not_coming' ? 'GPS shows the driver was on the way or at the pickup' : 'the customer cancelled after the driver accepted' };
+  }
+
   function withDiscount(q, discount) {
     if (!discount || q.discount) return q;
     return { ...q, discount, riderPays: r2(Math.max(0, q.riderPays - discount)), platformNet: r2(q.platformNet - discount) };
@@ -420,6 +447,10 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
       payTiming: trip.pay_timing, prepaid: trip.prepaid_amount ? { amount: trip.prepaid_amount, method: trip.prepaid_method } : null,
       balanceDue: trip.paid_at ? 0 : r2(Math.max(0, bill.riderPays - (trip.prepaid_amount || 0))),
       invoiceNo: trip.invoice_no, safety: json(trip.safety),
+      cancellation: trip.status === 'cancelled' ? {
+        by: trip.cancel_by, reason: trip.cancel_reason, fee: trip.cancel_fee, charged: trip.cancel_charged,
+        youPay: trip.cancel_charged === (isRider ? 'rider' : 'driver') ? trip.cancel_fee : 0,
+      } : undefined,
       offRoute: !!trip.off_route_alerted, sosAt: trip.sos_at,
       state: trip.state, distanceKm: trip.distance_km,
       etaMin: Math.round(trip.eta_min), traffic: { label: trip.traffic_label, source: trip.traffic_source },
@@ -477,7 +508,9 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
 
   app.get('/api/config', route(() => ({
     platformFee: C.PLATFORM_FEE, platformFeeCalamity: C.PLATFORM_FEE_CALAMITY,
-    verifyDiscount: C.VERIFY_DISCOUNT, subscriptionEnabled: C.SUBSCRIPTION_ENABLED, subscriptionMonthly: C.SUBSCRIPTION_MONTHLY,
+    verifyDiscount: C.VERIFY_DISCOUNT, platformFeeLong: C.PLATFORM_FEE_LONG, platformFeeLongKm: C.PLATFORM_FEE_LONG_KM,
+    cancel: { freeMin: C.CANCEL_FREE_WINDOW_MIN, capPercent: C.CANCEL_CUSTOMER_CAP.percent * 100 },
+    monthly: { enabled: C.MONTHLY_FEE_ENABLED, max: C.MONTHLY_FEE_MAX, sharePercent: C.MONTHLY_FEE_SHARE * 100 },
     defaultToll: C.DEFAULT_TOLL, stateDefaultToll: C.STATE_DEFAULT_TOLL, tollConfirmationsRequired: C.TOLL_CONFIRMATIONS_REQUIRED,
     vehicles: getRates(), conditions: Object.keys(C.CONDITION_MULTIPLIER),
     driverRules: C.DRIVER_RULES, maxPetCharge: C.MAX_PET_CHARGE, ratingCriteria: C.RATING_CRITERIA,
@@ -744,7 +777,6 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
       requireReady(req.user);
       const today = new Date(now()).toISOString().slice(0, 10);
       if (d.insurance_valid_till < today) throw httpError(409, 'Your vehicle insurance has expired. Update it to go online.');
-      if (C.SUBSCRIPTION_ENABLED && !(d.subscription_until > now())) throw httpError(402, `Monthly Olub subscription of ₹${C.SUBSCRIPTION_MONTHLY} is due`);
       if (d.suspended_reason) throw httpError(403, `Your account is on hold: ${d.suspended_reason}`);
       if (d.wallet_balance < C.WALLET_MIN_BALANCE) throw httpError(402, `Keep at least ₹${C.WALLET_MIN_BALANCE} in your Olub wallet to get customers. Please top up.`);
       const duty = dutyStatus(d.user_id);
@@ -762,14 +794,6 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
       forceOffline(d.user_id, 'driver');
     }
     return { online, duty: dutyStatus(d.user_id) };
-  }));
-
-  app.post('/api/driver/subscription', auth, role('driver'), route((req) => {
-    if (!C.SUBSCRIPTION_ENABLED) return { enabled: false, message: 'Subscription is free during launch' };
-    const d = getDriver(req.user.id); // TODO(prod): payment gateway
-    const until = Math.max(now(), d.subscription_until || 0) + 30 * C.DAY;
-    db.prepare('UPDATE drivers SET subscription_until = ? WHERE user_id = ?').run(until, d.user_id);
-    return { enabled: true, amount: C.SUBSCRIPTION_MONTHLY, until };
   }));
 
   app.get('/api/driver/earnings', auth, role('driver'), route((req) => {
@@ -835,7 +859,6 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
     if (trip.status !== 'requested') throw httpError(409, `Trip is already ${trip.status}`);
     if (db.prepare("SELECT 1 FROM trips WHERE driver_id = ? AND status IN ('accepted','started')").get(req.user.id)) throw httpError(409, 'Finish your current trip first');
     const d = getDriver(req.user.id);
-    if (C.SUBSCRIPTION_ENABLED && !(d.subscription_until > now())) throw httpError(402, 'Subscription due');
     db.prepare("UPDATE trips SET status = 'accepted', accepted_at = ? WHERE id = ?").run(now(), trip.id);
     for (const o of db.prepare("SELECT * FROM trips WHERE driver_id = ? AND status = 'requested' AND id != ?").all(req.user.id, trip.id)) {
       db.prepare("UPDATE trips SET status = 'rejected' WHERE id = ?").run(o.id);
@@ -856,7 +879,18 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
   app.post('/api/trips/:id/cancel', auth, route((req) => {
     const trip = loadTripFor(req);
     if (!['requested', 'accepted'].includes(trip.status)) throw httpError(409, 'Trip can no longer be cancelled');
-    db.prepare("UPDATE trips SET status = 'cancelled' WHERE id = ?").run(trip.id);
+    const by = trip.rider_id === req.user.id ? 'rider' : 'driver';
+    const reason = text(req.body?.reason, 60) || (by === 'rider' ? 'changed_plan' : 'driver_cancelled');
+    const verdict = cancellationVerdict(trip, by, reason);
+    db.prepare(`UPDATE trips SET status = 'cancelled', cancelled_at = ?, cancel_by = ?, cancel_reason = ?, cancel_fee = ?, cancel_charged = ? WHERE id = ?`)
+      .run(now(), by, reason, verdict.fee, verdict.charged, trip.id);
+    if (verdict.charged === 'driver') {
+      walletTxn(trip.driver_id, 'cancel_fee', -verdict.fee, { tripId: trip.id, note: `Cancellation fee — ${verdict.why}` });
+      if (getDriver(trip.driver_id).wallet_balance < C.WALLET_MIN_BALANCE) forceOffline(trip.driver_id, 'wallet_low');
+    } else if (verdict.charged === 'rider') {
+      db.prepare('UPDATE users SET cancel_dues = ROUND(cancel_dues + ?, 2) WHERE id = ?').run(verdict.fee, trip.rider_id);
+    }
+    req.auditNote = `cancelled by ${by}; ${verdict.charged ? `${verdict.charged} charged ₹${verdict.fee}` : 'no charge'}: ${verdict.why}`;
     notifyTrip(trip);
     return tripView(getTrip(trip.id), req.user);
   }));
@@ -895,6 +929,11 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
     if (!isValidPoint(p)) throw httpError(400, 'Bad location');
     // Prefer the driver's phone; use the rider's only if the driver's is silent.
     const fromDriver = trip.driver_id === req.user.id;
+    if (fromDriver && trip.status === 'accepted') {
+      // Is the driver actually coming? Used to decide who pays if the ride is cancelled.
+      const dist = haversineKm(p, { lat: trip.src_lat, lng: trip.src_lng });
+      db.prepare('UPDATE trips SET pickup_dist_start = COALESCE(pickup_dist_start, ?), pickup_dist_last = ? WHERE id = ?').run(dist, dist, trip.id);
+    }
     if (!fromDriver && trip.last_loc_at && now() - trip.last_loc_at < 20000) return { ok: true, used: false };
     if (trip.status === 'started' && (!trip.last_loc_at || now() - trip.last_loc_at >= 4000)) {
       const kmph = Number.isFinite(Number(req.body.kmph)) && req.body.kmph != null ? Math.min(250, Math.max(0, Number(req.body.kmph))) : null;
@@ -961,6 +1000,11 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
       paid_at = ?, payment_method = ? WHERE id = ?`).run(now(), JSON.stringify(final), invoiceNo, JSON.stringify(safetyScore(trip)),
       prepaidCovers ? now() : null, prepaidCovers ? trip.prepaid_method : null, trip.id);
     db.prepare('UPDATE drivers SET completed_trips = completed_trips + 1 WHERE user_id = ?').run(trip.driver_id);
+    if (final.dues) {
+      // The customer's earlier cancellation fee was collected with this fare; pass it on to Olub.
+      db.prepare('UPDATE users SET cancel_dues = MAX(0, ROUND(cancel_dues - ?, 2)) WHERE id = ?').run(final.dues, trip.rider_id);
+      walletTxn(trip.driver_id, 'cancel_fee_passthrough', -final.dues, { tripId: trip.id, note: "Customer's earlier cancellation fee, collected with this fare" });
+    }
     // Olub's fee and the ride GST come out of the driver's wallet (the rider pays the driver directly).
     walletTxn(trip.driver_id, 'platform_fee', -final.platformFee, { tripId: trip.id, note: `Olub fee${final.calamity ? ' (calamity relief)' : ''}, incl. GST` });
     walletTxn(trip.driver_id, 'ride_gst', -final.taxes.rideGst, { tripId: trip.id, note: `GST ${final.taxes.rideGstRate * 100}% on ride, remitted by Olub` });
@@ -1277,11 +1321,37 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v2.db'), 
 
   admin.get('/outbox', route(() => db.prepare('SELECT * FROM outbox ORDER BY id DESC LIMIT 100').all()));
 
-  const ticks = [];
+  // ---------- monthly charge: ₹937 or 20% of the month's earnings, whichever is less ----------
+  const monthOf = (ts) => new Date(ts + 5.5 * 3600e3).toISOString().slice(0, 7); // IST
+  function monthlyCharge(driverId, month) {
+    const rows = db.prepare("SELECT final, completed_at FROM trips WHERE driver_id = ? AND status = 'completed'").all(driverId)
+      .filter((t) => monthOf(t.completed_at) === month).map((t) => json(t.final));
+    const earned = r2(rows.reduce((s, f) => s + f.driverFare - f.breakdown.tollTotal, 0)); // tolls are not earnings
+    const tripFees = r2(rows.reduce((s, f) => s + f.platformFee, 0));
+    let amount = Math.min(C.MONTHLY_FEE_MAX, earned * C.MONTHLY_FEE_SHARE);
+    // Olub's whole take for the month (trip fees + this charge) stays within 20% of earnings.
+    if (C.MONTHLY_FEE_RESPECT_LEGAL_CAP) amount = Math.min(amount, Math.max(0, earned * C.COMMISSION_CAP - tripFees));
+    return { month, trips: rows.length, earned, tripFees, amount: Math.round(amount) };
+  }
+  function chargeLastMonth() {
+    if (!C.MONTHLY_FEE_ENABLED) return;
+    const d0 = new Date(now() + 5.5 * 3600e3); d0.setUTCDate(0); // last day of the previous month (IST)
+    const month = d0.toISOString().slice(0, 7);
+    for (const d of db.prepare('SELECT user_id FROM drivers WHERE user_id NOT IN (SELECT driver_id FROM monthly_charges WHERE month = ?)').all(month)) {
+      const m = monthlyCharge(d.user_id, month);
+      db.prepare('INSERT INTO monthly_charges (driver_id, month, earned, trip_fees, amount, charged_at) VALUES (?, ?, ?, ?, ?, ?)').run(d.user_id, month, m.earned, m.tripFees, m.amount, now());
+      if (!m.amount) continue;
+      walletTxn(d.user_id, 'monthly_fee', -m.amount, { note: `Monthly charge for ${month}: lower of ₹${C.MONTHLY_FEE_MAX} and ${C.MONTHLY_FEE_SHARE * 100}% of ₹${m.earned} earned` });
+      audit.log({ action: 'billing.monthly_charge', entity: 'users', entityId: d.user_id, details: m });
+      if (getDriver(d.user_id).wallet_balance < C.WALLET_MIN_BALANCE && !db.prepare("SELECT 1 FROM trips WHERE driver_id = ? AND status IN ('accepted','started')").get(d.user_id)) forceOffline(d.user_id, 'wallet_low');
+    }
+  }
+
+  const ticks = [chargeLastMonth];
   registerExtras({
     app, admin, db, C, now, audit, auth, role, route, rateLimit, queue, emit, maps, ticks, json, r2, text, firstName, fy, withPin,
     getUser, getDriver, getTrip, tripView, publicDriver, notifyTrip, loadTripFor, newPublicId, resolvePoint, getRates, calamityFor,
-    walletTxn, dutyStatus, forceOffline, activeFlag, meView, baseUrl, ageFrom, normVehicle, isEmail,
+    walletTxn, dutyStatus, forceOffline, monthlyCharge, activeFlag, meView, baseUrl, ageFrom, normVehicle, isEmail,
   });
 
   // ================= background jobs =================

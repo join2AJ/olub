@@ -21,7 +21,7 @@ module.exports = function registerExtras(x) {
     const src = x.resolvePoint(req.body.src, 'Pickup');
     const dst = x.resolvePoint(req.body.dst, 'Drop');
     const r = await x.maps.getRoute(src, dst, { vehicleType: 'sedan', when: new Date(now()) });
-    if (r.distanceKm < 0.2) throw httpError(400, 'Pickup and drop are too close');
+    if (r.distanceKm < 0.005) throw httpError(400, 'Pickup and drop are the same spot');
     const tolls = T.tollsOnRoute(db, src, dst);
     const rates = x.getRates();
     const calamity = !!x.calamityFor(src.state);
@@ -86,6 +86,7 @@ module.exports = function registerExtras(x) {
         other: [
           ...b.tolls.map((t) => ({ label: `Toll: ${t.name} (at cost)`, amount: t.amount })),
           { label: `Olub platform fee (incl. ₹${f.taxes.platformFeeGst} GST)`, amount: f.platformFee },
+          ...(f.dues ? [{ label: 'Earlier cancellation fee', amount: f.dues }] : []),
           ...(f.discount ? [{ label: 'Driver verification reward', amount: -f.discount }] : []),
         ],
         total: f.riderPays, totalGst: f.taxes.totalGst,
@@ -159,6 +160,11 @@ module.exports = function registerExtras(x) {
         // Olub's cut as a share of what riders paid — the law caps platform commission at 20%.
         commissionPercent: all.riderPaid ? r2((all.platformFees / all.riderPaid) * 100) : 0,
         wallet: x.getDriver(me.id).wallet_balance, duty: x.dutyStatus(me.id),
+        // What this month's charge would be if the month ended now, and past charges.
+        monthly: C.MONTHLY_FEE_ENABLED ? {
+          thisMonth: x.monthlyCharge(me.id, day(now()).slice(0, 7)), max: C.MONTHLY_FEE_MAX, sharePercent: C.MONTHLY_FEE_SHARE * 100,
+          past: db.prepare('SELECT month, earned, amount FROM monthly_charges WHERE driver_id = ? AND amount > 0 ORDER BY month DESC LIMIT 12').all(me.id),
+        } : null,
       }),
     };
   }));
@@ -345,9 +351,9 @@ module.exports = function registerExtras(x) {
       generatedAt: now(),
       rules: {
         dutyLimit: `${C.DUTY_MAX_HOURS} h on duty, then ${C.DUTY_REST_HOURS} h rest — enforced by the app`,
-        commissionCap: `Law: at most ${C.COMMISSION_CAP * 100}% of fare. Olub: ₹${C.PLATFORM_FEE} flat`,
+        commissionCap: `Law: at most ${C.COMMISSION_CAP * 100}% of fare. Olub: ₹${C.PLATFORM_FEE} up to ${C.PLATFORM_FEE_LONG_KM} km, ₹${C.PLATFORM_FEE_LONG} beyond${C.MONTHLY_FEE_ENABLED ? `, plus a monthly charge of ₹${C.MONTHLY_FEE_MAX} or ${C.MONTHLY_FEE_SHARE * 100}% of earnings (lower)` : ''}`,
         fitDeclaration: 'Driver must declare fit-to-drive before every ride',
-        cancellationFeeCap: `${C.CANCELLATION_FEE_CAP.percent * 100}% of fare or ₹${C.CANCELLATION_FEE_CAP.max}, whichever is lower (Olub charges none)`,
+        cancellationFeeCap: `₹${C.PLATFORM_FEE} / ₹${C.PLATFORM_FEE_LONG} to the side at fault; customer never pays more than ${C.CANCEL_CUSTOMER_CAP.percent * 100}% of the fare; free for ${C.CANCEL_FREE_WINDOW_MIN} min after booking`,
         grievanceOfficer: C.COMPANY.grievanceOfficer,
       },
       drivers: {

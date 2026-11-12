@@ -18,7 +18,13 @@ CREATE TABLE IF NOT EXISTS users (
   gender TEXT,                                  -- male | female | other
   trusted_name TEXT, trusted_phone TEXT, trusted_relation TEXT,
   status TEXT NOT NULL DEFAULT 'active',        -- active | erased
+  cancel_dues REAL NOT NULL DEFAULT 0,          -- unpaid cancellation fees, added to the next ride
   created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS monthly_charges (
+  id INTEGER PRIMARY KEY, driver_id INTEGER NOT NULL REFERENCES users(id), month TEXT NOT NULL,   -- YYYY-MM
+  earned REAL NOT NULL, trip_fees REAL NOT NULL, amount REAL NOT NULL, charged_at INTEGER NOT NULL,
+  UNIQUE (driver_id, month)
 );
 CREATE TABLE IF NOT EXISTS login_otps (
   phone TEXT PRIMARY KEY, code TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0
@@ -128,6 +134,9 @@ CREATE TABLE IF NOT EXISTS trips (
   safety TEXT,                                  -- JSON {score, overspeed, harshBrakes, maxKmph}
   off_route_since INTEGER, off_route_alerted INTEGER NOT NULL DEFAULT 0,
   sos_at INTEGER,
+  pickup_dist_start REAL, pickup_dist_last REAL,   -- driver's distance to the pickup: at accept / latest
+  cancel_by TEXT, cancel_reason TEXT, cancel_fee REAL, cancel_charged TEXT,   -- who cancelled, why, fee, who paid
+  cancelled_at INTEGER,
   created_at INTEGER NOT NULL,
   accepted_at INTEGER, started_at INTEGER, completed_at INTEGER
 );

@@ -29,6 +29,35 @@ function connect() {
   }));
 }
 
+/** Plain-words result of a cancellation for the person looking at it. */
+function cancelText(t) {
+  const c = t.cancellation || {};
+  if (c.youPay) return t.you === 'driver' ? `Ride cancelled. ${rs(c.youPay)} cancellation fee taken from your wallet.` : `Ride cancelled. ${rs(c.youPay)} cancellation fee will be added to your next ride.`;
+  if (c.charged) return `Ride cancelled. The ${c.charged === 'driver' ? 'driver' : 'customer'} pays the ${rs(c.fee)} fee — you pay nothing.`;
+  return 'Ride cancelled. No fee.';
+}
+
+function cancelSheet(t) {
+  const fee = t.distanceKm > S.cfg.platformFeeLongKm ? S.cfg.platformFeeLong : S.cfg.platformFee;
+  const rider = t.you === 'rider';
+  const reasons = [['driver_not_coming', 'Driver is not coming'], ['changed_plan', 'My plan changed'], ['mistake', 'Booked by mistake']];
+  const free = t.status === 'requested';
+  const sh = sheet('Cancel this ride?', `
+    ${free ? '<p class="muted">The driver has not accepted yet, so there is no fee.</p>' : rider ? `<p class="muted">Free within ${S.cfg.cancel.freeMin} minutes of booking. After that the fee is ${rs(fee)}, paid by one side only:</p>
+      <div class="legal"><p>If you say the driver is not coming and GPS shows that, the driver pays.</p><p>Otherwise you pay (never more than ${S.cfg.cancel.capPercent}% of the fare). It is added to your next ride.</p><p>The app's decision is final.</p></div>
+      <label class="f">Why are you cancelling?</label><div class="seg" id="cwhy" style="flex-direction:column;gap:3px">${reasons.map(([k, l], i) => `<button data-k="${k}" class="${i === 1 ? 'on' : ''}">${l}</button>`).join('')}</div>`
+    : `<p>You accepted this ride. If you cancel now, <b>${rs(fee)}</b> will be taken from your wallet.</p>`}
+    <button id="cyes" class="btn danger block">Cancel ride</button><button class="btn ghost block" data-close>Keep ride</button>`);
+  let why = rider ? 'changed_plan' : 'driver_cancelled';
+  $$('#cwhy button', sh.el).forEach((b) => { b.onclick = () => { why = b.dataset.k; $$('#cwhy button').forEach((x) => x.classList.toggle('on', x === b)); }; });
+  $('#cyes', sh.el).onclick = run(async () => {
+    const r = await api('POST', `/api/trips/${t.id}/cancel`, { reason: why });
+    sh.close(); S.trip = null; await refreshTrip();
+    if (S.me.role === 'rider') S.me = await api('GET', '/api/me');
+    render(); toast(cancelText(r), !!(r.cancellation && r.cancellation.youPay));
+  });
+}
+
 async function refreshTrip() {
   const prevId = S.trip && S.trip.id;
   const cur = await api('GET', '/api/trips/current');
@@ -36,7 +65,7 @@ async function refreshTrip() {
   if (prevId && !S.trip) {
     const old = await api('GET', `/api/trips/${prevId}`).catch(() => null);
     if (old && old.status === 'rejected') toast('Driver declined the ride', true);
-    if (old && old.status === 'cancelled') toast('Trip was cancelled', true);
+    if (old && old.status === 'cancelled') toast(cancelText(old), true);
     if (old && old.status === 'completed' && old.paidAt) S.trip = old; // keep the receipt until dismissed
   }
   if (S.trip && S.trip.id !== prevId) S.messages = await api('GET', `/api/trips/${S.trip.id}/messages`);
@@ -125,7 +154,7 @@ function renderServer(app) {
 function renderAuth(app) {
   app.innerHTML = `
     <div class="card hero"><h1>Book the cab<br>in front of you</h1>
-      <p class="muted">Scan its QR, see a fair fare, and go. Olub keeps only <b>${rs(S.cfg.platformFee)}</b> a trip — the rest is the driver's.</p></div>
+      <p class="muted">Scan its QR, see a fair fare, and go. Olub keeps only <b>${rs(S.cfg.platformFee)}</b> a trip (${rs(S.cfg.platformFeeLong)} over ${S.cfg.platformFeeLongKm} km) — the rest is the driver's.</p></div>
     <div class="card">
       <label class="f">Mobile number</label>
       <input id="phone" inputmode="numeric" maxlength="14" placeholder="98765 43210" autocomplete="tel">
@@ -322,6 +351,7 @@ function fareTable(f, { final = false, forDriver = false } = {}) {
     <tr class="to-driver"><td>${forDriver ? 'You keep' : 'Driver keeps'}</td><td>${rs(f.driverFare)}</td></tr>
     ${f.taxes.rideGst ? `<tr><td>GST ${f.taxes.rideGstRate * 100}% on ride</td><td>${rs(f.taxes.rideGst)}</td></tr>` : ''}
     <tr><td>Olub fee <span class="muted small">incl. GST</span>${f.calamity ? ' <span class="chip warn">relief rate</span>' : ''}</td><td>${rs(f.platformFee)}</td></tr>
+    ${f.dues ? `<tr><td>Earlier cancellation fee</td><td>${rs(f.dues)}</td></tr>` : ''}
     ${f.discount ? `<tr><td>Driver verification reward</td><td>−${rs(f.discount)}</td></tr>` : ''}
     <tr class="total"><td>${forDriver ? 'Customer pays' : (final ? 'Total' : 'You pay')}</td><td>${rs(f.riderPays)}</td></tr>
     ${forDriver ? `<tr class="sub"><td colspan="2">${rs(f.walletDeduction)} (fee + GST) is taken from your wallet when the trip ends.</td></tr>` : ''}
@@ -474,6 +504,11 @@ async function renderInsights(app) {
       <div class="stat"><div class="v">${rs(x.averageFare)}</div><div class="l">Average per trip · ${rs(x.perKm)}/km</div></div>
       <div class="stat"><div class="v">${x.safety.average != null ? x.safety.average : '—'}</div><div class="l">Safety score${x.safety.trips ? ` · ${x.safety.harshBrakes} harsh brakes, ${x.safety.overspeed} overspeed` : ''}</div></div>
     </div>
+    ${driver && x.monthly ? `<div class="card"><h2>Monthly charge</h2>
+      <p class="muted small">${rs(x.monthly.max)} or ${x.monthly.sharePercent}% of what you earned in the month, whichever is less. Taken from your wallet on the 1st. Olub's total (trip fees + this) never goes above 20% of your earnings.</p>
+      <table class="fare"><tr><td>Earned this month so far</td><td>${rs(x.monthly.thisMonth.earned)}</td></tr><tr><td>Trip fees already paid</td><td>${rs(x.monthly.thisMonth.tripFees)}</td></tr>
+      <tr class="total"><td>Charge if the month ended today</td><td>${rs(x.monthly.thisMonth.amount)}</td></tr></table>
+      ${x.monthly.past.map((m) => `<div class="between small" style="padding:4px 0"><span class="muted">${esc(m.month)} · earned ${rs(m.earned)}</span><b>${rs(m.amount)}</b></div>`).join('')}</div>` : ''}
     ${driver ? `<div class="card"><h2>Money earned vs GST</h2><table class="fare">
       <tr><td>Customers paid you</td><td>${rs(x.all.riderPaid)}</td></tr>
       <tr><td>GST on rides (Olub remits)</td><td>−${rs(x.all.rideGst)}</td></tr>
@@ -485,7 +520,7 @@ async function renderInsights(app) {
       ${x.busiestHour != null ? `<p class="muted small" style="margin-top:8px">Busiest around ${hr(x.busiestHour)}.</p>` : ''}
       ${x.topPlaces.length ? `<h3>Top destinations</h3>${x.topPlaces.map((p) => `<div class="between" style="padding:5px 0"><span>${ic('pin')} ${esc(p.name)}</span><b>${p.visits}×</b></div>`).join('')}` : ''}</div>` : ''}
     ${x.months.length ? `<div class="card"><h2>Month by month</h2><div class="list">${x.months.map((m) => `<div class="between"><div><b>${new Date(`${m.key}-15`).toLocaleString('en-IN', { month: 'long', year: 'numeric' })}</b><div class="muted small">${m.trips} trips · ${m.km} km · GST ${rs(m.totalGst)}</div></div><b>${rs(money(m))}</b></div>`).join('')}</div></div>` : ''}
-    ${driver ? `<div class="card"><h2>Wallet activity</h2><div class="list">${wallet.txns.map((t) => `<div class="txn"><div><b>${{ topup: 'Top-up', platform_fee: 'Olub fee', ride_gst: 'Ride GST', verify_reward: 'Reward from Olub', adjustment: 'Adjustment' }[t.type] || t.type}</b>
+    ${driver ? `<div class="card"><h2>Wallet activity</h2><div class="list">${wallet.txns.map((t) => `<div class="txn"><div><b>${{ topup: 'Top-up', platform_fee: 'Olub fee', ride_gst: 'Ride GST', verify_reward: 'Reward from Olub', adjustment: 'Adjustment', cancel_fee: 'Cancellation fee', cancel_fee_passthrough: "Customer's cancellation fee", monthly_fee: 'Monthly charge' }[t.type] || t.type}</b>
       <div class="muted small">${when(t.ts)}${t.tripId ? ` · trip #${t.tripId}` : ''}</div></div><span class="a ${t.amount >= 0 ? 'cr' : 'dr'}">${t.amount >= 0 ? '+' : '−'}${rs(Math.abs(t.amount))}</span></div>`).join('') || '<p class="muted">No activity yet.</p>'}</div></div>` : ''}
     <div class="card"><h2>Trips</h2><div class="list">${trips.map((t) => `<div><div class="between"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.dst.name)}</b>
         <span class="chip ${t.status === 'completed' ? '' : 'grey'}">${esc(t.status)}</span></div>
@@ -497,7 +532,7 @@ async function renderInsights(app) {
 }
 
 function topupSheet() {
-  const sh = sheet('Top up wallet', `<p class="muted">Olub takes its ${rs(S.cfg.platformFee)} fee and the ride GST from this wallet when a trip ends. Keep at least ${rs(S.cfg.wallet.min)} to get customers.</p>
+  const sh = sheet('Top up wallet', `<p class="muted">Olub takes its fee (${rs(S.cfg.platformFee)}, or ${rs(S.cfg.platformFeeLong)} over ${S.cfg.platformFeeLongKm} km) and the ride GST from this wallet when a trip ends. Keep at least ${rs(S.cfg.wallet.min)} to get customers.</p>
     <div class="chips" id="amts">${[100, 200, 500, 1000].map((a) => `<button class="chip" data-a="${a}" style="border:0;font-size:15px;padding:9px 16px">${rs(a)}</button>`).join('')}</div>
     <label class="f">Amount</label><input id="tu" type="number" inputmode="numeric" value="200">
     <button id="tugo" class="btn block">Pay by UPI</button><p class="muted small center" style="margin-top:8px">Test mode: no real money moves yet.</p>`);
