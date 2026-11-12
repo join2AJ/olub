@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
-const src = process.env.OLUB_DB || path.join(__dirname, '..', 'data', 'olub-v4.db');
+const src = process.env.OLUB_DB || path.join(__dirname, '..', 'data', 'olub-v6.db');
 const dir = process.env.OLUB_BACKUP_DIR || path.join(__dirname, '..', 'backups');
 fs.mkdirSync(dir, { recursive: true });
 const out = path.join(dir, `olub-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);

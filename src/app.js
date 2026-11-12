@@ -11,6 +11,8 @@ const { haversineKm } = require('./geo');
 const { isValidPoint, pointToSegmentKm, decodePolyline, pointToPathKm } = require('./geo');
 const Digipin = require('../public/js/digipin.js');
 const registerExtras = require('./extras');
+const seedDemo = require('./demo');
+const Hex = require('./hex');
 const defaultMaps = require('./maps');
 const T = require('./tolls');
 const legal = require('./legal');
@@ -36,7 +38,7 @@ const text = (s, max = 300) => String(s || '').trim().slice(0, max) || null;
 const DOC_KEYS = ['license', 'rc', 'kyc', 'vehicle', 'selfie'];
 const ID_PREFIX = { rider: 'OLB-C', driver: 'OLB-D', admin: 'OLB-A' };
 
-function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), clock = Date.now, maps = defaultMaps } = {}) {
+function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v6.db'), clock = Date.now, maps = defaultMaps } = {}) {
   const db = openDb(dbFile);
   const now = () => clock();
   const audit = createAudit(db, clock);
@@ -319,8 +321,9 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     return pt;
   }
 
-  async function buildQuote(body, rider) {
-    const d = findDriver(body.driver);
+  async function buildQuote(body, rider, extra = {}) {
+    const d = extra.driver || findDriver(body.driver);
+    const pickupKm = extra.pickupKm || 0; // the cab's road distance to the customer, when Olub found the cab
     if (d.user_id === rider.id) throw httpError(400, 'You cannot book yourself');
     if (d.status === 'incomplete' || d.status === 'rejected') throw httpError(409, 'This driver has not completed Olub registration');
     if (!d.online) throw httpError(409, 'Driver is offline. Ask them to go online in the Olub app.');
@@ -342,7 +345,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     const cal = calamityFor(state);
     const rates = getRates()[d.vehicle_type];
     const quote = calculateFare({
-      distanceKm: route.distanceKm, vehicleType: d.vehicle_type, rates,
+      distanceKm: route.distanceKm, pickupKm, vehicleType: d.vehicle_type, rates,
       condition: d.vehicle_condition, completedTrips: d.completed_trips,
       waitMinutes: route.delayMin,
       tolls: T.tollsForVehicle(routeTolls, d.vehicle_type),
@@ -360,7 +363,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     const d = getDriver(trip.driver_id);
     const quote = json(trip.quote);
     return calculateFare({
-      distanceKm: trip.distance_km, vehicleType: quote.vehicleType, rates: quote.rates,
+      distanceKm: trip.distance_km - (trip.pickup_km || 0), pickupKm: trip.pickup_km || 0, vehicleType: quote.vehicleType, rates: quote.rates,
       condition: d.vehicle_condition,
       completedTrips: quote.driverCompletedTrips ?? d.completed_trips, // locked at booking
       waitMinutes: trip.wait_minutes ?? quote.breakdown.waitMinutes,
@@ -447,6 +450,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
       payTiming: trip.pay_timing, prepaid: trip.prepaid_amount ? { amount: trip.prepaid_amount, method: trip.prepaid_method } : null,
       balanceDue: trip.paid_at ? 0 : r2(Math.max(0, bill.riderPays - (trip.prepaid_amount || 0))),
       invoiceNo: trip.invoice_no, safety: json(trip.safety),
+      matched: !!trip.match_mode, pickupKm: trip.pickup_km || 0,
       cancellation: trip.status === 'cancelled' ? {
         by: trip.cancel_by, reason: trip.cancel_reason, fee: trip.cancel_fee, charged: trip.cancel_charged,
         youPay: trip.cancel_charged === (isRider ? 'rider' : 'driver') ? trip.cancel_fee : 0,
@@ -518,7 +522,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     overdue: { warn: C.OVERDUE_WARN_MIN, alert: C.OVERDUE_ALERT_MIN }, minAge: C.MIN_AGE,
     dsrTypes: C.DSR_TYPES, dsrPublicDays: C.DSR_PUBLIC_SLA_DAYS,
     dsrCorrectionFields: Object.fromEntries(Object.entries(C.DSR_CORRECTION_FIELDS).map(([k, v]) => [k, { label: v.label, mode: v.mode }])),
-    liveTraffic: !!C.GOOGLE_MAPS_API_KEY, legalVersion: legal.VERSION,
+    liveTraffic: !!C.GOOGLE_MAPS_API_KEY, legalVersion: legal.VERSION, matchOfferSeconds: C.MATCH_OFFER_SECONDS,
     gst: { ride: C.RIDE_GST_RATE, platformFee: C.PLATFORM_FEE_GST_RATE }, company: C.COMPANY,
     wallet: { min: C.WALLET_MIN_BALANCE, maxTopup: C.WALLET_MAX_TOPUP },
     duty: { maxHours: C.DUTY_MAX_HOURS, restHours: C.DUTY_REST_HOURS },
@@ -815,6 +819,104 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     return { trips: rows.length, earned: r2(earned), tollsCollected: r2(tolls), owedToOlub: r2(platformNet) };
   }));
 
+  // Where an online driver is waiting, so customers can see cabs around them.
+  app.post('/api/driver/location', auth, role('driver'), route((req) => {
+    const p = { lat: Number(req.body.lat), lng: Number(req.body.lng) };
+    if (!isValidPoint(p)) throw httpError(400, 'Bad location');
+    db.prepare('UPDATE drivers SET last_lat = ?, last_lng = ?, last_loc_at = ? WHERE user_id = ?').run(p.lat, p.lng, now(), req.user.id);
+    return { ok: true };
+  }));
+
+  // Cabs near the customer: type and rough position only (rounded to about 100 m), never who they are.
+  app.get('/api/drivers/nearby', auth, route((req) => {
+    const c = { lat: Number(req.query.lat), lng: Number(req.query.lng) };
+    if (!isValidPoint(c)) return [];
+    return db.prepare(`SELECT d.user_id, d.vehicle_type, d.last_lat, d.last_lng FROM drivers d
+      WHERE d.online = 1 AND d.suspended_reason IS NULL AND d.last_lat IS NOT NULL AND d.last_loc_at > ?
+        AND ABS(d.last_lat - ?) < 0.08 AND ABS(d.last_lng - ?) < 0.08
+        AND d.user_id NOT IN (SELECT driver_id FROM trips WHERE status IN ('accepted','started')) LIMIT 30`)
+      .all(now() - 30 * 60000, c.lat, c.lng)
+      .map((d) => ({ type: d.vehicle_type, lat: Math.round(d.last_lat * 1000) / 1000, lng: Math.round(d.last_lng * 1000) / 1000 }));
+  }));
+
+
+  // ================= finding the nearest cab (hexagonal search) =================
+  /** Online, free cabs around a point, nearest ring first. */
+  function nearbyCabs(src, { vehicleType = null, pet = false, exclude = [], riderId = null } = {}) {
+    return db.prepare(`SELECT * FROM drivers WHERE online = 1 AND suspended_reason IS NULL AND status IN ('submitted','verified')
+        AND last_lat IS NOT NULL AND last_loc_at > ?
+        AND user_id NOT IN (SELECT driver_id FROM trips WHERE status IN ('requested','accepted','started'))`).all(now() - 30 * 60000)
+      .filter((d) => d.user_id !== riderId && !exclude.includes(d.user_id) && (!vehicleType || d.vehicle_type === vehicleType))
+      .filter((d) => !pet || (json(d.prefs) || {}).petsOk)
+      .filter((d) => !unavailableReason(d))
+      .map((d) => {
+        const pos = { lat: d.last_lat, lng: d.last_lng };
+        return { d, pos, ring: Hex.ring(pos, src, C.MATCH_HEX_KM), km: haversineKm(pos, src) };
+      })
+      .filter((c) => c.ring <= C.MATCH_MAX_RINGS)
+      .sort((a, b) => a.ring - b.ring || a.km - b.km);
+  }
+
+  /** Road distance and time for a cab to reach the pickup. */
+  async function pickupLeg(cab, src) {
+    const leg = await maps.getRoute(cab.pos, src, { vehicleType: cab.d.vehicle_type, when: new Date(now()) });
+    return { km: Math.round(leg.distanceKm * 100) / 100, min: Math.max(1, Math.round(leg.etaMin)) };
+  }
+
+  // What is around me: one option per vehicle type (the nearest cab of that type), with the full fare.
+  app.post('/api/trips/nearby', auth, role('rider'), route(async (req) => {
+    const src = resolvePoint(req.body.src, 'Pickup');
+    const cabs = nearbyCabs(src, { pet: !!req.body.pet, riderId: req.user.id });
+    const nearest = new Map();
+    for (const c of cabs) if (!nearest.has(c.d.vehicle_type)) nearest.set(c.d.vehicle_type, c);
+    const options = [];
+    for (const [type, c] of nearest) {
+      const leg = await pickupLeg(c, src);
+      const q = await buildQuote(req.body, req.user, { driver: c.d, pickupKm: leg.km });
+      options.push({
+        type, label: C.VEHICLES[type].label, ring: c.ring, awayKm: leg.km, awayMin: leg.min,
+        riderPays: q.quote.riderPays, platformFee: q.quote.platformFee, tripKm: q.quote.breakdown.tripKm, pickupKm: leg.km,
+        rating: ratingOf(c.d.user_id), experience: experienceTier(c.d.completed_trips).label,
+        count: cabs.filter((x) => x.d.vehicle_type === type).length,
+      });
+    }
+    const far = cabs.length ? Math.min(C.MATCH_MAX_RINGS, cabs[cabs.length - 1].ring) : 2;
+    const show = Math.min(5, Math.max(2, cabs.length ? cabs[0].ring + 1 : 2)); // rings drawn on the map
+    return {
+      options: options.sort((a, b) => a.awayKm - b.awayKm),
+      searchedRings: far, hexKm: C.MATCH_HEX_KM,
+      hexes: Hex.cellsWithin(show).map((cell) => ({
+        ring: Hex.ringOf(cell), corners: Hex.corners(cell, src, C.MATCH_HEX_KM),
+        cabs: cabs.filter((c) => { const k = Hex.cellOf(c.pos, src, C.MATCH_HEX_KM); return k.q === cell.q && k.r === cell.r; }).length,
+      })),
+      cabs: cabs.map((c) => ({ type: c.d.vehicle_type, ring: c.ring, lat: Math.round(c.pos.lat * 1000) / 1000, lng: Math.round(c.pos.lng * 1000) / 1000 })),
+    };
+  }));
+
+  /** Offer a matched trip to the next nearest cab; cancel it free of charge if nobody is left. */
+  async function offerNext(trip, why) {
+    const tried = json(trip.tried) || [];
+    const quote = json(trip.quote);
+    const src = { lat: trip.src_lat, lng: trip.src_lng };
+    const body = { src: { ...src, name: trip.src_name, state: trip.state }, dst: { lat: trip.dst_lat, lng: trip.dst_lng, name: trip.dst_name }, pet: !!trip.pet };
+    const oldDriver = trip.driver_id;
+    for (const c of nearbyCabs(src, { vehicleType: quote.vehicleType, pet: !!trip.pet, exclude: tried, riderId: trip.rider_id })) {
+      try {
+        const leg = await pickupLeg(c, src);
+        const q = await buildQuote(body, getUser(trip.rider_id), { driver: c.d, pickupKm: leg.km });
+        db.prepare('UPDATE trips SET driver_id = ?, quote = ?, distance_km = ?, pickup_km = ?, tried = ?, offered_at = ? WHERE id = ?')
+          .run(c.d.user_id, JSON.stringify(q.quote), q.quote.distanceKm, leg.km, JSON.stringify([...tried, c.d.user_id]), now(), trip.id);
+        audit.log({ action: 'match.offered_next', entity: 'trips', entityId: trip.id, details: { why, ring: c.ring, awayKm: leg.km } });
+        emit(oldDriver, 'trip', {}); notifyTrip(trip);
+        return true;
+      } catch { /* this cab cannot take it; try the next */ }
+    }
+    db.prepare("UPDATE trips SET status = 'cancelled', cancelled_at = ?, cancel_by = 'system', cancel_reason = 'no_driver', cancel_fee = 0 WHERE id = ?").run(now(), trip.id);
+    audit.log({ action: 'match.no_driver', entity: 'trips', entityId: trip.id, details: { why } });
+    emit(oldDriver, 'trip', {}); notifyTrip(trip);
+    return false;
+  }
+
   // ================= booking =================
   app.get('/api/drivers/lookup', auth, route((req) => publicDriver(findDriver(req.query.q))));
 
@@ -833,7 +935,15 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     requireReady(req.user);
     if (db.prepare(`SELECT 1 FROM trips WHERE rider_id = ? AND (status IN ('requested','accepted','started')
       OR (status = 'completed' AND paid_at IS NULL))`).get(req.user.id)) throw httpError(409, 'You already have an active trip');
-    const q = await buildQuote(req.body, req.user);
+    // Either the customer names the cab (QR / number), or Olub finds the nearest one of the chosen type.
+    let extra = {}; let matched = null;
+    if (req.body.match) {
+      const src0 = resolvePoint(req.body.src, 'Pickup');
+      matched = nearbyCabs(src0, { vehicleType: req.body.match.vehicleType, pet: !!req.body.pet, riderId: req.user.id })[0];
+      if (!matched) throw httpError(409, 'No cab of that type is free near you right now');
+      extra = { driver: matched.d, pickupKm: (await pickupLeg(matched, src0)).km };
+    }
+    const q = await buildQuote(req.body, req.user, extra);
     const guest = resolveGuest(req.body.guest, req.user);
     const r = db.prepare(`INSERT INTO trips (rider_id, driver_id, guest_id, src_name, src_lat, src_lng, dst_name, dst_lat, dst_lng,
       state, distance_km, eta_min, free_flow_min, traffic_source, traffic_label, pet, quote, status, otp, track_token, created_at, pay_timing, route_poly)
@@ -844,6 +954,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
       req.body.payTiming === 'start' ? 'start' : 'end', q.route.polyline || null,
     );
     const tripId = Number(r.lastInsertRowid);
+    if (matched) db.prepare('UPDATE trips SET match_mode = 1, tried = ?, pickup_km = ?, offered_at = ? WHERE id = ?').run(JSON.stringify([q.d.user_id]), extra.pickupKm, now(), tripId);
     const ins = db.prepare('INSERT OR IGNORE INTO trip_tolls (trip_id, toll_id) VALUES (?, ?)');
     for (const t of q.routeTolls) ins.run(tripId, t.id);
     notifyTrip({ id: tripId });
@@ -880,9 +991,11 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     return tripView(getTrip(trip.id), req.user);
   }));
 
-  app.post('/api/trips/:id/reject', auth, role('driver'), route((req) => {
+  app.post('/api/trips/:id/reject', auth, role('driver'), route(async (req) => {
     const trip = loadTripFor(req, { as: 'driver' });
     if (trip.status !== 'requested') throw httpError(409, `Trip is already ${trip.status}`);
+    // A cab Olub found: pass the request to the next nearest cab instead of ending it.
+    if (trip.match_mode) { await offerNext(trip, 'declined'); return { ok: true }; }
     db.prepare("UPDATE trips SET status = 'rejected' WHERE id = ?").run(trip.id);
     notifyTrip(trip);
     return tripView(getTrip(trip.id), req.user);
@@ -959,6 +1072,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
       if (off <= allowed && trip.off_route_since) db.prepare('UPDATE trips SET off_route_since = NULL, off_route_alerted = 0 WHERE id = ?').run(trip.id);
     }
     db.prepare('UPDATE trips SET last_lat = ?, last_lng = ?, last_loc_at = ? WHERE id = ?').run(p.lat, p.lng, now(), trip.id);
+    if (fromDriver) db.prepare('UPDATE drivers SET last_lat = ?, last_lng = ?, last_loc_at = ? WHERE user_id = ?').run(p.lat, p.lng, now(), req.user.id);
     const loc = { tripId: trip.id, ...p, at: now() };
     emit(trip.rider_id, 'loc', loc); emit(trip.driver_id, 'loc', loc);
     return { ok: true, used: true };
@@ -1358,6 +1472,14 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     return dsrView(db.prepare('SELECT * FROM dsr_requests WHERE id = ?').get(r.id), { admin: true });
   }));
 
+  // Test data: drivers, customers and trips in every state.
+  const loadDemo = () => seedDemo({ db, C, now, legal, getRates, newPublicId, fy, audit });
+  admin.post('/demo', route(() => loadDemo()));
+  admin.get('/demo', route(() => ({
+    loaded: !!db.prepare("SELECT 1 FROM users WHERE phone = '9000000101'").get(),
+    logins: db.prepare("SELECT name, phone, role, public_id AS publicId FROM users WHERE email LIKE '%@demo.olub.example' ORDER BY role, id").all(),
+  })));
+
   admin.get('/outbox', route(() => db.prepare('SELECT * FROM outbox ORDER BY id DESC LIMIT 100').all()));
 
   // ---------- monthly charge: ₹937 or 20% of the month's earnings, whichever is less ----------
@@ -1438,6 +1560,10 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
       emit(t.rider_id, 'safety', { tripId: t.id, offRoute: true });
       notifyTrip(t);
     }
+    // 5. Matched requests nobody answered in time go to the next nearest cab.
+    for (const t of db.prepare("SELECT * FROM trips WHERE status = 'requested' AND match_mode = 1 AND offered_at < ?").all(now() - C.MATCH_OFFER_SECONDS * 1000)) {
+      offerNext(t, 'no answer').catch((e) => console.error('[match]', e));
+    }
     for (const fn of ticks) fn();
     db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now());
   }
@@ -1450,6 +1576,8 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v4.db'), 
     res.status(status).json({ error: status >= 500 ? 'Something went wrong' : err.message, ...(err.todo && { todo: err.todo }) });
   });
 
+  app.locals.loadDemo = loadDemo;
+  if (process.env.OLUB_DEMO === '1') { try { loadDemo(); } catch (e) { console.error('[demo]', e); } }
   app.locals.db = db;
   app.locals.tick = tick;
   app.locals.audit = audit;

@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS drivers (
   subscription_until INTEGER,
   permit_no TEXT,                               -- commercial permit / badge number
   wallet_balance REAL NOT NULL DEFAULT 0,
+  last_lat REAL, last_lng REAL, last_loc_at INTEGER,   -- where the cab is waiting (shown roughly on the customer's map)
   suspended_reason TEXT
 );
 CREATE TABLE IF NOT EXISTS wallet_txns (
@@ -136,6 +137,8 @@ CREATE TABLE IF NOT EXISTS trips (
   off_route_since INTEGER, off_route_alerted INTEGER NOT NULL DEFAULT 0,
   sos_at INTEGER,
   route_poly TEXT,                              -- road path (encoded polyline)
+  match_mode INTEGER NOT NULL DEFAULT 0,        -- 1 = Olub found the cab (nearest first)
+  tried TEXT, pickup_km REAL NOT NULL DEFAULT 0, offered_at INTEGER,
   pickup_dist_start REAL, pickup_dist_last REAL,   -- driver's distance to the pickup: at accept / latest
   cancel_by TEXT, cancel_reason TEXT, cancel_fee REAL, cancel_charged TEXT,   -- who cancelled, why, fee, who paid
   cancelled_at INTEGER,
@@ -208,6 +211,14 @@ const SEED_PLACES = [
   ['Whitefield, Bengaluru', 'KA', 12.9698, 77.7500],
   ['Kempegowda Airport, Bengaluru', 'KA', 13.1986, 77.7066],
   ['Hebbal, Bengaluru', 'KA', 13.0358, 77.5970],
+  ['Charbagh Railway Station, Lucknow', 'UP', 26.8320, 80.9230],
+  ['Hazratganj, Lucknow', 'UP', 26.8500, 80.9460],
+  ['Lulu Mall, Shaheed Path, Lucknow', 'UP', 26.7877, 80.9919],
+  ['Patrakarpuram, Gomti Nagar, Lucknow', 'UP', 26.8530, 80.9990],
+  ['Chaudhary Charan Singh Airport, Lucknow', 'UP', 26.7606, 80.8893],
+  ['Alambagh Bus Station, Lucknow', 'UP', 26.8170, 80.9070],
+  ['Munshi Pulia, Indira Nagar, Lucknow', 'UP', 26.8880, 80.9980],
+  ['KGMU, Chowk, Lucknow', 'UP', 26.8690, 80.9150],
   ['Connaught Place, Delhi', 'DL', 28.6315, 77.2167],
   ['Cyber City, Gurugram', 'HR', 28.4950, 77.0895],
   ['Andheri Station, Mumbai', 'MH', 19.1197, 72.8464],

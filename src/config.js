@@ -42,6 +42,11 @@ module.exports = {
     grievanceOfficer: process.env.OLUB_GRIEVANCE || 'Grievance Officer — grievance@olub.example',
   },
 
+  // ---------- finding a cab nearby (hexagonal search) ----------
+  MATCH_HEX_KM: 0.6,             // edge of one hexagon; rings are about 1 km apart
+  MATCH_MAX_RINGS: 12,           // search up to about 12 km from the pickup
+  MATCH_OFFER_SECONDS: 45,       // a driver has this long to accept before the next one is asked
+
   // ---------- driver wallet ----------
   // Olub's fee (and GST) is taken from this wallet when a trip ends.
   WALLET_MIN_BALANCE: 100,       // below this the driver cannot receive customers

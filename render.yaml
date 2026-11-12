@@ -13,6 +13,9 @@ services:
         value: "22"
       - key: OLUB_TRUST_PROXY
         value: "1"
+      # Loads test drivers, customers and trips every time the free server restarts.
+      - key: OLUB_DEMO
+        value: "1"
       - key: OLUB_DATA_KEY
         generateValue: true
       # Your own mobile number(s), comma separated. These accounts open the admin console.

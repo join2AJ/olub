@@ -36,7 +36,9 @@ function defaultTollFor(state) {
 function calculateFare(p) {
   const v = p.rates || C.VEHICLES[p.vehicleType];
   if (!v) throw new Error(`Unknown vehicle type: ${p.vehicleType}`);
-  const distanceKm = Math.max(0, Number(p.distanceKm) || 0);
+  // When the cab has to come to the customer, that distance is charged too (p.pickupKm).
+  const pickupKm = Math.max(0, Number(p.pickupKm) || 0);
+  const distanceKm = Math.max(0, Number(p.distanceKm) || 0) + pickupKm;
   const conditionMul = C.CONDITION_MULTIPLIER[p.condition] ?? 1;
   const tier = experienceTier(Math.max(0, p.completedTrips || 0));
   const waitMinutes = Math.max(0, Number(p.waitMinutes) || 0);
@@ -67,6 +69,7 @@ function calculateFare(p) {
       base: v.base,
       perKm: v.perKm,
       distanceCharge: round2(distanceKm * v.perKm),
+      pickupKm: round2(pickupKm), tripKm: round2(distanceKm - pickupKm),
       conditionMultiplier: conditionMul,
       experienceMultiplier: tier.multiplier,
       experienceLabel: tier.label,
