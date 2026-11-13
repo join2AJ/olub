@@ -31,7 +31,7 @@ Needs Node.js 22.13 or newer. No database to install.
 ```bash
 npm install
 npm start        # http://localhost:3000
-npm test         # 18 automated tests
+npm test         # 29 automated tests
 npm run backup   # consistent copy of the database
 ```
 
@@ -41,6 +41,7 @@ Open `http://localhost:3000` in a browser to use the same app without installing
 |---|---|
 | `OLUB_ADMIN_PHONES` | Mobile numbers that are admins (default `9999999999`) |
 | `OLUB_DEMO_LOGIN=0` | Remove the one-tap Passenger / Driver / Admin demo buttons from the sign-in screen (they are also off whenever `OLUB_DEV_OTP=0`) |
+| `OLUB_IPGEO=0` | Do not look up the visitor's city from the IP address (the map then opens on Delhi until GPS answers). `OLUB_IPGEO_URL` points to a different lookup service |
 | `OLUB_DEMO=1` | Load the demo drivers, customers and trips at start-up (useful on hosts that wipe data on restart) |
 | `GOOGLE_MAPS_API_KEY` | Live traffic and Google address search. Without it the app uses free OpenStreetMap road routes and search, and estimates traffic by time of day |
 | `OLUB_OSRM_URL`, `OLUB_PHOTON_URL` | Your own OpenStreetMap routing / search servers (default: the free public ones, which have no uptime promise). `OLUB_OSM=0` turns them off |
@@ -97,13 +98,13 @@ Admin → **Demo data** → **Load demo data** adds 9 drivers, 4 customers and 1
 - GPS and DIGIPIN locations, map pin, address search; the map shows the road path
 - Book for a guest; travel with a pet if the driver allows it
 - Mandatory trusted contact, live tracking link, SOS, late and off-route alarms
-- GST invoice, trip history, spending and GST summary
+- GST invoice (download as JPG or Excel), trip history, spending by month, date, day or hour for any period, recent places and one-tap rebooking
 
 **Drivers**
 - Vehicle, licence, RC, permit, insurance and KYC with photos; printable QR
 - Cab rules (no smoking, no alcohol, no tobacco, no food), pets and pet charge
 - Wallet: top up, ₹100 minimum to get customers, every deduction listed
-- Earnings vs GST, by day, month and hour; safety score per ride
+- Earnings vs GST for any period, time on the road (online, with a passenger, going to pickups, waiting), downloads in Excel and JPG; safety score per ride
 - 12-hour driving limit with 10-hour rest, with warnings
 - Crowd-checked tolls: photo and amount, confirmed by 5 more drivers
 

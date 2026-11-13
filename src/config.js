@@ -169,6 +169,13 @@ module.exports = {
     grievance: 'Raise a privacy complaint',
   },
 
+  // ---------- where the user is (from the IP address) ----------
+  // Used only to open the map on the right city before GPS answers. The address is sent to a free
+  // lookup service; OLUB_IPGEO=0 turns the lookup off and the map opens on the default city.
+  IPGEO_ENABLED: process.env.OLUB_IPGEO !== '0',
+  IPGEO_URL: process.env.OLUB_IPGEO_URL || 'https://ipwho.is',
+  DEFAULT_CITY: { name: 'New Delhi', state: 'DL', lat: 28.6139, lng: 77.2090 },
+
   // ---------- security ----------
   SESSION_TTL_MS: 30 * DAY,
   TRIP_OTP_MAX_ATTEMPTS: 5,

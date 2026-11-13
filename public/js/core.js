@@ -175,7 +175,9 @@ function decodePolyline(str) {
 // ---------- maps (Leaflet + OpenStreetMap tiles) ----------
 function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
   if (!window.L) { el.innerHTML = '<div class="empty">Map unavailable</div>'; return null; }
-  const map = L.map(el, { zoomControl: false, attributionControl: true }).setView([20.6, 78.9], 4);
+  // Opens on the user's city (from GPS, else the IP address, else the default city) rather than a map of all India.
+  const home = S.where || (S.cfg && S.cfg.defaultCity) || { lat: 28.6139, lng: 77.209 };
+  const map = L.map(el, { zoomControl: false, attributionControl: true }).setView([home.lat, home.lng], 12);
   // Quiet, greyed basemap so the route and cabs stand out (dark at night).
   const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); // toned down in CSS

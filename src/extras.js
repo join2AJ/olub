@@ -111,10 +111,18 @@ module.exports = function registerExtras(x) {
   }));
 
   // ================= insights: analyse my trips, earnings, GST =================
+  // ?from=YYYY-MM-DD&to=YYYY-MM-DD (India time, inclusive). Without them: everything.
   app.get('/api/insights', auth, route((req) => {
     const me = req.user; const isDriver = me.role === 'driver';
-    const trips = db.prepare(`SELECT * FROM trips WHERE ${isDriver ? 'driver_id' : 'rider_id'} = ? AND status = 'completed' ORDER BY completed_at`).all(me.id)
-      .map((t) => ({ ...t, f: json(t.final), s: json(t.safety) }));
+    const IST = 5.5 * 3600e3;
+    const dayStart = (d) => Date.parse(`${d}T00:00:00Z`) - IST;
+    const okDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '') && !Number.isNaN(Date.parse(d));
+    const from = okDate(req.query.from) ? dayStart(req.query.from) : 0;
+    const to = okDate(req.query.to) ? dayStart(req.query.to) + C.DAY : now() + C.DAY;
+    const mine = db.prepare(`SELECT * FROM trips WHERE ${isDriver ? 'driver_id' : 'rider_id'} = ? ORDER BY id`).all(me.id);
+    const allDone = mine.filter((t) => t.status === 'completed').map((t) => ({ ...t, f: json(t.final), s: json(t.safety) }));
+    const inPeriod = (ts) => ts >= from && ts < to;
+    const trips = allDone.filter((t) => inPeriod(t.completed_at));
     const totals = (list) => ({
       trips: list.length, km: sum(list, (t) => t.distance_km),
       riderPaid: sum(list, (t) => t.f.riderPays), rideGst: sum(list, (t) => t.f.taxes?.rideGst),
@@ -124,49 +132,65 @@ module.exports = function registerExtras(x) {
       driverKeeps: sum(list, (t) => t.f.driverFare),
       totalGst: sum(list, (t) => t.f.taxes?.totalGst),
     });
-    const since = (days) => trips.filter((t) => t.completed_at >= now() - days * C.DAY);
-    const between = (a, b) => trips.filter((t) => t.completed_at >= now() - a * C.DAY && t.completed_at < now() - b * C.DAY);
-    const byKey = (keyFn) => {
+    const amount = (t) => (isDriver ? t.f.driverFare : t.f.riderPays);
+    const local = (ts) => new Date(ts + IST);
+    const group = (keyFn, order) => {
       const m = new Map();
-      for (const t of trips) { const k = keyFn(t); m.set(k, [...(m.get(k) || []), t]); }
-      return [...m.entries()].map(([key, list]) => ({ key, ...totals(list) }));
+      for (const t of trips) { const k = keyFn(t); const g = m.get(k) || { key: k, trips: 0, amount: 0, km: 0 }; g.trips++; g.amount = r2(g.amount + amount(t)); g.km = r2(g.km + t.distance_km); m.set(k, g); }
+      return order ? order.map((k) => m.get(k) || { key: k, trips: 0, amount: 0, km: 0 }) : [...m.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
     };
-    const days = [];
-    for (let i = 13; i >= 0; i--) {
-      const k = day(now() - i * C.DAY);
-      const list = trips.filter((t) => day(t.completed_at) === k);
-      days.push({ date: k, trips: list.length, amount: sum(list, (t) => (isDriver ? t.f.driverFare : t.f.riderPays)) });
-    }
-    const hours = Array.from({ length: 24 }, () => 0);
-    for (const t of trips) hours[new Date(t.started_at + 5.5 * 3600e3).getUTCHours()]++;
     const scored = trips.filter((t) => t.s && t.s.score != null);
     const places = new Map();
     for (const t of trips) places.set(t.dst_name, (places.get(t.dst_name) || 0) + 1);
-    const all = totals(trips); const week = totals(since(7)); const lastWeek = totals(between(14, 7));
-    return {
-      role: isDriver ? 'driver' : 'rider',
-      all, week, lastWeek, month: totals(since(30)),
-      months: byKey((t) => day(t.completed_at).slice(0, 7)).sort((a, b) => (a.key < b.key ? 1 : -1)).slice(0, 12),
-      days, hours,
-      busiestHour: trips.length ? hours.indexOf(Math.max(...hours)) : null,
-      averageFare: trips.length ? r2((isDriver ? all.driverKeeps : all.riderPaid) / trips.length) : 0,
-      perKm: all.km ? r2((isDriver ? all.driverKeeps : all.riderPaid) / all.km) : 0,
+    const sel = totals(trips); const all = totals(allDone);
+    const out = {
+      role: isDriver ? 'driver' : 'rider', period: { from: from || null, to: Math.min(to, now()) },
+      sel, all,
+      cancelled: mine.filter((t) => ['cancelled', 'rejected'].includes(t.status) && inPeriod(t.created_at)).length,
+      groups: {
+        month: group((t) => local(t.completed_at).toISOString().slice(0, 7)),
+        date: group((t) => local(t.completed_at).toISOString().slice(0, 10)),
+        weekday: group((t) => local(t.completed_at).getUTCDay(), [1, 2, 3, 4, 5, 6, 0]),
+        hour: group((t) => local(t.started_at).getUTCHours(), Array.from({ length: 24 }, (_, h) => h)),
+      },
       safety: {
         average: scored.length ? Math.round(scored.reduce((s, t) => s + t.s.score, 0) / scored.length) : null,
         overspeed: sum(scored, (t) => t.s.overspeed), harshBrakes: sum(scored, (t) => t.s.harshBrakes), trips: scored.length,
       },
       topPlaces: [...places.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, visits]) => ({ name, visits })),
-      ...(isDriver && {
+    };
+    if (isDriver) {
+      // Time on the road in the period. Online time is what counts towards the 12-hour limit.
+      const hi = Math.min(to, now());
+      const overlap = (a, b) => Math.max(0, Math.min(b ?? now(), hi) - Math.max(a, from));
+      const online = db.prepare('SELECT started_at, ended_at FROM duty_sessions WHERE driver_id = ?').all(me.id).reduce((s, x) => s + overlap(x.started_at, x.ended_at), 0);
+      let toPickup = 0, withPassenger = 0;
+      for (const t of mine) {
+        if (!t.accepted_at) continue;
+        const end = t.completed_at || t.cancelled_at || (['accepted', 'started'].includes(t.status) ? now() : t.accepted_at);
+        toPickup += overlap(t.accepted_at, t.started_at || end);
+        if (t.started_at) withPassenger += overlap(t.started_at, end);
+      }
+      const mins = (ms) => Math.round(ms / 60000);
+      const onTrip = toPickup + withPassenger;
+      Object.assign(out, {
         // Olub's cut as a share of what riders paid — the law caps platform commission at 20%.
         commissionPercent: all.riderPaid ? r2((all.platformFees / all.riderPaid) * 100) : 0,
         wallet: x.getDriver(me.id).wallet_balance, duty: x.dutyStatus(me.id),
+        hours: {
+          onlineMin: mins(Math.max(online, onTrip)), withPassengerMin: mins(withPassenger), toPickupMin: mins(toPickup),
+          waitingForCustomersMin: mins(Math.max(0, online - onTrip)),
+          trafficDelayMin: Math.round(sum(trips, (t) => t.wait_minutes)),
+          limitNote: `The ${C.DUTY_MAX_HOURS}-hour daily limit counts all the time you are online: waiting for customers, going to a pickup and driving.`,
+        },
         // What this month's charge would be if the month ended now, and past charges.
         monthly: C.MONTHLY_FEE_ENABLED ? {
           thisMonth: x.monthlyCharge(me.id, day(now()).slice(0, 7)), max: C.MONTHLY_FEE_MAX, sharePercent: C.MONTHLY_FEE_SHARE * 100,
           past: db.prepare('SELECT month, earned, amount FROM monthly_charges WHERE driver_id = ? AND amount > 0 ORDER BY month DESC LIMIT 12').all(me.id),
         } : null,
-      }),
-    };
+      });
+    }
+    return out;
   }));
 
   // ================= SOS =================

@@ -19,7 +19,16 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import android.content.ContentValues;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.view.View;
+import android.widget.Toast;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import android.widget.LinearLayout;
 
 import androidx.core.graphics.Insets;
@@ -180,6 +189,35 @@ public class MainActivity extends Activity {
             send.putExtra(Intent.EXTRA_SUBJECT, name);
             send.putExtra(Intent.EXTRA_TEXT, text);
             startActivity(Intent.createChooser(send, name));
+        }
+
+        /** Save a download (invoice picture, Excel sheet, data export) into the phone's Downloads/Olub folder. */
+        @JavascriptInterface
+        public void saveFile(final String name, final String mime, final String base64) {
+            String message;
+            try {
+                byte[] data = Base64.decode(base64, Base64.DEFAULT);
+                String safe = name.replaceAll("[^A-Za-z0-9._-]", "_");
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues v = new ContentValues();
+                    v.put(MediaStore.Downloads.DISPLAY_NAME, safe);
+                    v.put(MediaStore.Downloads.MIME_TYPE, mime);
+                    v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Olub");
+                    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                    if (uri == null) throw new IllegalStateException("no destination");
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) { out.write(data); }
+                    message = "Saved to Downloads/Olub: " + safe;
+                } else {
+                    File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                    File f = new File(dir, safe);
+                    try (OutputStream out = new FileOutputStream(f)) { out.write(data); }
+                    message = "Saved: " + f.getAbsolutePath();
+                }
+            } catch (Exception e) {
+                message = "Could not save the file";
+            }
+            final String shown = message;
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, shown, Toast.LENGTH_LONG).show());
         }
 
         @JavascriptInterface

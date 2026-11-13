@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **12 Nov 2026, 22:56 IST**
+Last updated: **13 Nov 2026, 07:13 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 95 complete · 11 in progress · 6 planned · 10 need you
+**Totals:** 107 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -113,7 +113,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 6.3 | Email confirmed | 🟡 In progress | 12 Nov 2026, 02:20 | Code logic complete. Sending real email needs a provider (12.4) |
 | 6.4 | Customers and drivers never see each other's numbers | ✅ Complete | 11 Nov 2026, 21:10 | |
 | 6.5 | In-app chat | ✅ Complete | 11 Nov 2026, 21:10 | |
-| 6.6 | In-app voice call | 🟡 In progress | 11 Nov 2026, 21:10 | Built. Not yet tried on two real phones; needs a relay server for all networks |
+| 6.6 | In-app voice call | 🟡 In progress | 13 Nov 2026, 07:13 | Works between two browsers in the automated run. Not yet tried on two real phones; needs a relay server for all networks |
 
 ## 7. Safety and tracking
 
@@ -172,6 +172,18 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.16 | More premium look in the original green theme | ✅ Complete | 12 Nov 2026, 22:47 | Deeper green, soft gold trim, calmer spacing and shadows |
 | 10.17 | One-tap demo buttons: Passenger, Driver, Admin | ✅ Complete | 12 Nov 2026, 22:47 | On the sign-in screen in test mode. Loads the demo data by itself. Remove with `OLUB_DEMO_LOGIN=0` |
 | 10.18 | Booking like Ola: select a ride above, then one button below | ✅ Complete | 12 Nov 2026, 22:56 | Tap a row (Book Any or a vehicle type); it gets the green border and a "drivers nearby" tag. One dark button books the selected ride. Pay timing and Preferences sit just above it |
+| 10.19 | Map opens on the user's city from the IP address; Delhi by default | ✅ Complete | 13 Nov 2026, 07:13 | GPS still sets the pickup. The sign-in address and rough city are recorded and shown to admins. Needs the server to see real visitor addresses (it does on Render) |
+| 10.20 | Passenger analytics without Olub fees, GST or per-km average | ✅ Complete | 13 Nov 2026, 07:13 | Drivers still see GST and fees, as asked earlier |
+| 10.21 | "Overall" total instead of a per-trip figure | ✅ Complete | 13 Nov 2026, 07:13 | |
+| 10.22 | "When you ride" by month, date, day or hour | ✅ Complete | 13 Nov 2026, 07:13 | Bars are labelled with values |
+| 10.23 | Analytics filtered by a chosen period | ✅ Complete | 13 Nov 2026, 07:13 | 7 days, this month, last month, 3 months, all time, or custom dates. Trips list and downloads follow the same period |
+| 10.24 | Admin remembers where you were on the page | ✅ Complete | 13 Nov 2026, 07:13 | Every tab and admin section reopens at its last position. Section bar stays on screen; the activity log starts short with "Show more" |
+| 10.25 | Driver analytics show time on the road | ✅ Complete | 13 Nov 2026, 07:13 | Online, with a passenger, going to pickups, waiting for customers, and paid traffic time. Note: the 12-hour limit counts all online time, including waiting |
+| 10.26 | Downloads in JPG and Excel | ✅ Complete | 13 Nov 2026, 07:13 | Invoices and the Activity / Earnings data for the chosen period. In the Android app they are saved to Downloads/Olub (not yet checked on a phone) |
+| 10.27 | Chat improved | ✅ Complete | 13 Nov 2026, 07:13 | Quick replies and message times |
+| 10.28 | In-app voice call checked end to end | ✅ Complete | 13 Nov 2026, 07:13 | Rings, answers, connects with audio and hangs up in the automated run. Fixed a fault that could leave the answering side showing "Connecting…". Still needs a relay server for some mobile networks |
+| 10.29 | Recent destinations and "Book this trip again" | ✅ Complete | 13 Nov 2026, 07:13 | |
+| 10.30 | Full self-review of every screen | ✅ Complete | 13 Nov 2026, 07:13 | Automated walk-through of over 40 screens in light and dark mode checks for errors, sideways scrolling, clipped text and small buttons. It found and I fixed: two screens that scrolled sideways, the call fault above, and the admin page jumping |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |

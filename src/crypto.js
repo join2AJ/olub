@@ -14,7 +14,7 @@ if (/^[0-9a-f]{64}$/i.test(C.DATA_KEY)) {
 } else if (process.env.NODE_ENV === 'production') {
   // No key configured: create one and keep it next to the database, so the server still starts.
   // Setting OLUB_DATA_KEY yourself is safer (the key then lives apart from the data).
-  const file = path.join(path.dirname(process.env.OLUB_DB || path.join(__dirname, '..', 'data', 'olub-v7.db')), 'olub.key');
+  const file = path.join(path.dirname(process.env.OLUB_DB || path.join(__dirname, '..', 'data', 'olub-v8.db')), 'olub.key');
   try {
     key = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'hex');
     if (key.length !== 32) throw new Error('bad key file');

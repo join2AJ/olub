@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
   trusted_name TEXT, trusted_phone TEXT, trusted_relation TEXT,
   status TEXT NOT NULL DEFAULT 'active',        -- active | erased
   cancel_dues REAL NOT NULL DEFAULT 0,
-  photo TEXT,                                   -- small profile photo (data URL)          -- unpaid cancellation fees, added to the next ride
+  photo TEXT,                                   -- small profile photo (data URL)
+  last_ip TEXT, last_city TEXT, last_seen_at INTEGER,   -- last sign-in address and rough place          -- unpaid cancellation fees, added to the next ride
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS monthly_charges (

@@ -77,7 +77,7 @@ test('nearest cab is asked first; if it declines or does not answer, the next ne
   assert.equal(sedan.ring, 1);
   assert.equal(sedan.count, 2, 'the 22 km cab is outside the search area');
   assert.ok(sedan.pickupKm > 1.2 && sedan.pickupKm < 1.4);
-  assert.ok(found.hexes.length >= 19 && found.hexes.some((h) => h.cabs === 1));
+  assert.equal(found.cabs.length, 3, 'three free cabs inside the search area');
   assert.equal(JSON.stringify(found).includes('UP32AA'), false, 'cabs stay anonymous until one is booked');
 
   // Request a sedan: the nearest one gets the request, and the fare includes its trip to the pickup.

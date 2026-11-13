@@ -13,7 +13,7 @@ function renderRider(app) {
     <div class="card sheet-card">
       <h2>Where to?</h2>
       <div class="route">
-        <button id="pick-src"><span class="dotp"></span><span class="t ${b.src ? '' : 'ph'}">${esc(b.src ? b.src.name : 'Finding your location…')}</span>${pinTag(b.src)}</button>
+        <button id="pick-src"><span class="dotp"></span><span class="t ${b.src ? '' : 'ph'}">${esc(b.src ? b.src.name : (b.gpsFailed ? `Choose pickup point${S.where ? ` · ${S.where.name}` : ''}` : 'Finding your location…'))}</span>${pinTag(b.src)}</button>
         <button id="pick-dst"><span class="dotd"></span><span class="t ${b.dst ? '' : 'ph'}">${esc(b.dst ? b.dst.name : 'Choose destination')}</span>${pinTag(b.dst)}</button>
       </div>
       ${b.src && b.dst && !S.estimate ? '<div class="searching" id="loading"></div><p class="muted small center" style="margin:0">Looking for cabs near you…</p>' : ''}
@@ -28,11 +28,17 @@ function renderRider(app) {
   if (S.nearby) S.map.setCabs(S.nearby.cabs);
   else if (b.src) api('GET', `/api/drivers/nearby?lat=${b.src.lat}&lng=${b.src.lng}`).then((cabs) => { if (S.map && !S.nearby) S.map.setCabs(cabs); }).catch(() => {});
   bindTodos(app);
+  if (!b.src) whereAmI().then((w) => {
+    if (!w || S.booking.src || !S.map || S.tab !== 'home') return;
+    S.map.map.setView([w.lat, w.lng], 12); S.map.setHexGrid(w, []);
+    api('GET', `/api/drivers/nearby?lat=${w.lat}&lng=${w.lng}`).then((cabs) => { if (S.map && !S.booking.src) S.map.setCabs(cabs); }).catch(() => {});
+    const t = $('#pick-src .t'); if (t && b.gpsFailed) t.textContent = `Choose pickup point · ${w.name}`;
+  });
   const setPoint = (k) => (p) => { b[k] = p; b.autoFailed = false; S.estimate = null; S.nearby = null; S.quote = null; render(); };
   $('#pick-src').onclick = () => placePicker('Pickup point', setPoint('src'));
   $('#pick-dst').onclick = () => placePicker('Destination', setPoint('dst'));
   // Pickup is picked automatically from GPS (shown with its DIGIPIN).
-  if (!b.src && !b.gpsTried) { b.gpsTried = true; myLocation().then(setPoint('src')).catch(() => { const t = $('#pick-src .t'); if (t) t.textContent = 'Choose pickup point'; }); }
+  if (!b.src && !b.gpsTried) { b.gpsTried = true; myLocation().then(setPoint('src')).catch(() => { b.gpsFailed = true; const t = $('#pick-src .t'); if (t) t.textContent = `Choose pickup point${S.where ? ` · ${S.where.name}` : ''}`; }); }
   // As soon as both ends are known, fetch the road route, nearby cabs and fares.
   if (b.src && b.dst && !S.estimate && !b.loading && !b.autoFailed) {
     b.loading = true;
@@ -116,7 +122,7 @@ function showEstimate() {
       <div class="seg" style="margin-top:14px" id="mode"><button data-m="plate" class="${b.mode === 'plate' ? 'on' : ''}">Type number plate</button><button data-m="phone" class="${b.mode === 'phone' ? 'on' : ''}">Driver's mobile / Olub ID</button></div>
       <div class="row" style="margin-top:10px"><div class="plate-in grow ${b.mode === 'phone' ? 'phone' : ''}" id="plate-wrap"><span class="ind">IND</span>
         <input id="drv" value="${esc(b.driver)}" placeholder="${b.mode === 'plate' ? 'KA01AB1234' : '98765 43210'}" autocapitalize="characters" autocomplete="off"></div>
-        <button id="find" class="btn">${ic('search')}</button></div></div>`;
+        <button id="find" class="btn" aria-label="Find this cab">${ic('search')}</button></div></div>`;
   if (S.map) { S.map.setRoute(b.src, b.dst, e.route.polyline); S.map.setHexGrid(b.src, n.cabs); S.map.setCabs(n.cabs); }
   $$('[data-pick]').forEach((x) => { x.onclick = () => { b.pick = x.dataset.pick; const y = window.scrollY; showEstimate(); window.scrollTo(0, y); }; });
   $('#paytoggle').onclick = () => { b.payTiming = b.payTiming === 'end' ? 'start' : 'end'; $('#paytoggle span').textContent = `Pay at the ${b.payTiming}`; };
@@ -406,7 +412,7 @@ async function renderAdmin(app) {
   app.innerHTML = `<div class="subtabs">${ADMIN_TABS.map(([k, l]) => `<button data-sub="${k}" class="${S.sub === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="pane"><div class="skel"></div><div class="skel"></div></div>`;
   $$('[data-sub]').forEach((b) => { b.onclick = () => { S.sub = b.dataset.sub; render(); }; });
   const pane = $('#pane'); const sub = S.sub;
-  try { await ADMIN[sub](pane); } catch (e) { if (S.sub === sub) pane.innerHTML = `<div class="card alert">${esc(e.message)}</div>`; }
+  try { await ADMIN[sub](pane); applyScroll(); } catch (e) { if (S.sub === sub) pane.innerHTML = `<div class="card alert">${esc(e.message)}</div>`; }
 }
 const download = (name, text) => {
   if (Native && Native.saveText) return Native.saveText(name, text);
@@ -516,7 +522,8 @@ const ADMIN = {
       <div id="trail"></div><div class="card"><div class="between"><h2 style="margin:0">Latest activity</h2><button id="averify" class="btn small ghost">Check log integrity</button></div><div id="alog" class="list" style="margin-top:10px"></div></div>`;
     const line = (a) => `<div class="audit"><b>${esc(a.action)}</b> ${a.entityId ? `#${esc(a.entityId)}` : ''} <span class="muted">· ${when(a.ts)} · ${esc(a.actorName || a.actorRole || 'system')} ${esc(a.actorPublicId || '')} · ${esc(a.ip || '')}</span>
       <div class="muted">${esc(JSON.stringify(a.details || {}).slice(0, 260))}</div></div>`;
-    $('#alog').innerHTML = (await api('GET', '/api/admin/audit?limit=60')).map(line).join('');
+    const loadLog = async (n) => { const rows = await api('GET', `/api/admin/audit?limit=${n}`); $('#alog').innerHTML = rows.map(line).join('') + (n < 200 && rows.length === n ? '<button class="btn ghost block" id="amore">Show more</button>' : ''); const m = $('#amore'); if (m) m.onclick = run(() => loadLog(200)); };
+    await loadLog(12);
     $('#averify').onclick = run(async () => { const v = await api('GET', '/api/admin/audit/verify'); toast(v.ok ? `Audit log intact — ${v.entries} entries` : `Audit log was changed at entry #${v.brokenAt}`, !v.ok); });
     const search = run(async () => {
       const us = await api('GET', `/api/admin/users?q=${encodeURIComponent($('#uq').value)}`);
@@ -524,7 +531,7 @@ const ADMIN = {
       $$('[data-u]').forEach((b) => { b.onclick = run(async () => {
         const t = await api('GET', `/api/admin/users/${b.dataset.u}/trail`);
         $('#trail').innerHTML = `<div class="card"><h2>${esc(t.user.name)} · ${esc(t.user.publicId)}</h2>
-          ${kv({ Mobile: t.user.phone, Email: `${t.user.email || '—'}${t.user.emailVerified ? ' (confirmed)' : ''}`, 'Age / sex': `${t.user.age ?? '—'} / ${t.user.gender || '—'}`, Rating: t.user.rating.average ?? '—', 'Trusted contact': t.user.trusted ? `${t.user.trusted.name} ${t.user.trusted.phone}` : '—' })}
+          ${kv({ Mobile: t.user.phone, Email: `${t.user.email || '—'}${t.user.emailVerified ? ' (confirmed)' : ''}`, 'Age / sex': `${t.user.age ?? '—'} / ${t.user.gender || '—'}`, Rating: t.user.rating.average ?? '—', 'Trusted contact': t.user.trusted ? `${t.user.trusted.name} ${t.user.trusted.phone}` : '—', 'Last sign-in from': t.user.lastIp ? `${t.user.lastIp}${t.user.lastCity ? ` (${t.user.lastCity})` : ''} · ${when(t.user.lastSeenAt)}` : '—' })}
           <h3>Consents</h3>${t.consents.map((c) => `<div class="small">${esc(c.doc)} v${esc(c.version)} · ${when(c.acceptedAt)}${c.withdrawnAt ? ' · withdrawn' : ''}</div>`).join('')}
           <h3>Trips (${t.trips.length})</h3>${t.trips.map((x) => `<div class="small">#${x.id} ${esc(x.status)} · ${esc(x.from)} → ${esc(x.to)} · ${x.amount != null ? rs(x.amount) : ''} · ${x.fitDeclaredAt ? 'fit declared' : ''} · ${when(x.createdAt)}<br><span class="muted">${esc(x.rider)} with ${esc(x.driver)}</span></div>`).join('') || '<p class="muted small">None</p>'}
           <h3>Ratings received (${t.ratingsReceived.length})</h3>${t.ratingsReceived.map((r) => `<div class="small">${ic('star', 'fill')} ${r.overall} from ${esc(r.from)} — ${esc([r.good, r.bad, r.improve].filter(Boolean).join(' / '))}</div>`).join('') || '<p class="muted small">None</p>'}
@@ -533,7 +540,7 @@ const ADMIN = {
         $('#trail').scrollIntoView({ behavior: 'smooth' });
       }); });
     });
-    $('#ugo').onclick = search; search();
+    $('#ugo').onclick = search; await search();
   },
 
   async rates(pane) {

@@ -38,12 +38,13 @@ const text = (s, max = 300) => String(s || '').trim().slice(0, max) || null;
 const DOC_KEYS = ['license', 'rc', 'kyc', 'vehicle', 'selfie'];
 const ID_PREFIX = { rider: 'OLB-C', driver: 'OLB-D', admin: 'OLB-A' };
 
-function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), clock = Date.now, maps = defaultMaps } = {}) {
+function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), clock = Date.now, maps = defaultMaps } = {}) {
   const db = openDb(dbFile);
   const now = () => clock();
   const audit = createAudit(db, clock);
   const app = express();
-  app.set('trust proxy', process.env.OLUB_TRUST_PROXY === '1');
+  // Behind a host's proxy (Render and similar) the visitor's address is in X-Forwarded-For.
+  app.set('trust proxy', process.env.OLUB_TRUST_PROXY === '1' || !!process.env.RENDER);
   let publicBase = process.env.OLUB_PUBLIC_URL || '';
 
   // ---------- security headers + CORS (the Android app calls from its own origin) ----------
@@ -227,6 +228,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), 
       dob: u.dob, age: ageFrom(u.dob), gender: u.gender,
       trusted: u.trusted_name ? { name: u.trusted_name, phone: u.trusted_phone, relation: u.trusted_relation } : null,
       todo: todoFor(u), pendingConsents: pendingConsents(u), rating: ratingOf(u.id), cancelDues: u.cancel_dues, photo: u.photo,
+      lastIp: u.last_ip, lastCity: u.last_city, lastSeenAt: u.last_seen_at,
     };
     if (u.role === 'driver') {
       const d = getDriver(u.id);
@@ -524,13 +526,51 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), 
     dsrCorrectionFields: Object.fromEntries(Object.entries(C.DSR_CORRECTION_FIELDS).map(([k, v]) => [k, { label: v.label, mode: v.mode }])),
     liveTraffic: !!C.GOOGLE_MAPS_API_KEY, legalVersion: legal.VERSION, demoLogin: C.DEMO_LOGIN, matchOfferSeconds: C.MATCH_OFFER_SECONDS,
     gst: { ride: C.RIDE_GST_RATE, platformFee: C.PLATFORM_FEE_GST_RATE }, company: C.COMPANY,
-    wallet: { min: C.WALLET_MIN_BALANCE, maxTopup: C.WALLET_MAX_TOPUP },
+    wallet: { min: C.WALLET_MIN_BALANCE, maxTopup: C.WALLET_MAX_TOPUP }, defaultCity: C.DEFAULT_CITY,
     duty: { maxHours: C.DUTY_MAX_HOURS, restHours: C.DUTY_REST_HOURS },
     lea: { agencies: C.LEA_AGENCIES, publicDays: C.LEA_PUBLIC_SLA_DAYS },
     calamity: db.prepare('SELECT * FROM calamity').all(),
   })));
+
+  // Rough location from the IP address, so the map opens on the right city (falls back to the default city).
+  const geoCache = new Map();
+  const isPrivateIp = (ip) => !ip || /^(::1|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::ffff:(127|10)\.|f[cd])/i.test(ip);
+  async function whereIs(ip) {
+    const fallback = { ...C.DEFAULT_CITY, source: 'default' };
+    if (!C.IPGEO_ENABLED || isPrivateIp(ip)) return fallback;
+    if (geoCache.has(ip)) return geoCache.get(ip);
+    let out = fallback;
+    try {
+      const res = await fetch(`${C.IPGEO_URL}/${encodeURIComponent(ip)}?fields=success,city,region,country_code,latitude,longitude`, { signal: AbortSignal.timeout(4000) });
+      const j = await res.json();
+      if (j.success && j.country_code === 'IN' && isValidPoint({ lat: j.latitude, lng: j.longitude })) {
+        out = { name: j.city || j.region || 'India', state: maps.STATE_CODES?.[String(j.region || '').toLowerCase()], lat: j.latitude, lng: j.longitude, source: 'ip' };
+      }
+    } catch { /* lookup service unreachable: use the default city */ }
+    if (geoCache.size > 5000) geoCache.clear();
+    geoCache.set(ip, out);
+    return out;
+  }
+  app.get('/api/where', route(async (req) => {
+    const w = await whereIs(req.ip);
+    // Remember the last address and rough place on the account (shown to admins in the audit trail).
+    const h = req.get('authorization') || '';
+    const s = h.startsWith('Bearer ') && db.prepare('SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?').get(sha256(h.slice(7)), now());
+    if (s) db.prepare('UPDATE users SET last_ip = ?, last_city = ?, last_seen_at = ? WHERE id = ?').run(req.ip, w.source === 'ip' ? w.name : null, now(), s.user_id);
+    return w;
+  }));
   app.get('/api/legal', route(() => ({ version: legal.VERSION, docs: legal.docs, required: legal.required })));
   app.get('/api/places', route(() => db.prepare('SELECT * FROM places ORDER BY name').all()));
+  // Places this customer has been to recently, for one-tap rebooking.
+  app.get('/api/places/recent', auth, route((req) => {
+    const seen = new Set(); const out = [];
+    for (const t of db.prepare("SELECT dst_name AS name, dst_lat AS lat, dst_lng AS lng, state FROM trips WHERE rider_id = ? AND status IN ('completed','started','accepted') ORDER BY id DESC LIMIT 40").all(req.user.id)) {
+      if (seen.has(t.name)) continue; seen.add(t.name); out.push(withPin({ name: t.name, lat: t.lat, lng: t.lng, state: t.state }));
+      if (out.length === 4) break;
+    }
+    return out;
+  }));
+
   app.get('/api/places/search', auth, route(async (req) => {
     const q = String(req.query.q || '').trim().toLowerCase();
     const local = db.prepare('SELECT * FROM places').all().filter((p) => p.name.toLowerCase().includes(q))
@@ -602,6 +642,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), 
       db.prepare('UPDATE users SET phone_verified_at = ? WHERE id = ?').run(now(), user.id);
     }
     db.prepare('DELETE FROM login_otps WHERE phone = ?').run(phone);
+    db.prepare('UPDATE users SET last_ip = ?, last_seen_at = ? WHERE id = ?').run(req.ip, now(), user.id);
     const token = crypto.randomBytes(32).toString('hex');
     db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
       .run(sha256(token), user.id, now(), now() + C.SESSION_TTL_MS);
@@ -912,14 +953,9 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v7.db'), 
       });
     }
     const far = cabs.length ? Math.min(C.MATCH_MAX_RINGS, cabs[cabs.length - 1].ring) : 2;
-    const show = Math.min(5, Math.max(2, cabs.length ? cabs[0].ring + 1 : 2)); // rings drawn on the map
     return {
       options: options.sort((a, b) => a.awayKm - b.awayKm),
       searchedRings: far, hexKm: C.MATCH_HEX_KM,
-      hexes: Hex.cellsWithin(show).map((cell) => ({
-        ring: Hex.ringOf(cell), corners: Hex.corners(cell, src, C.MATCH_HEX_KM),
-        cabs: cabs.filter((c) => { const k = Hex.cellOf(c.pos, src, C.MATCH_HEX_KM); return k.q === cell.q && k.r === cell.r; }).length,
-      })),
       cabs: cabs.map((c) => ({ type: c.d.vehicle_type, ring: c.ring, lat: Math.round(c.pos.lat * 1000) / 1000, lng: Math.round(c.pos.lng * 1000) / 1000 })),
     };
   }));

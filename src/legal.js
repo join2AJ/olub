@@ -5,7 +5,7 @@ const C = require('./config');
 // Plain-language terms shown in the app. Every acceptance is stored with the
 // version, time and IP (table `consents`) and written to the audit log.
 // NOTE: drafts — have a lawyer review before launch.
-const VERSION = '2026-11-12b';
+const VERSION = '2026-11-13';
 
 module.exports = {
   VERSION,
@@ -55,8 +55,9 @@ module.exports = {
     privacy: {
       title: 'Privacy notice',
       body: [
-        'We collect: your name, mobile number, email, date of birth, sex, trusted contact; for drivers also vehicle, licence, RC and KYC documents; trip details, live location during a trip, in-app messages, ratings, and a security log of actions in your account.',
-        'We use it only to: verify identity, connect customer and driver, calculate fares, share your live ride with your trusted contact, keep everyone safe, and meet legal duties.',
+        'We collect: your name, mobile number, email, date of birth, sex, trusted contact; for drivers also vehicle, licence, RC and KYC documents; trip details, live location during a trip, in-app messages, ratings, and a security log of actions in your account, and the internet (IP) address you connect from.',
+        'Your IP address shows roughly which city you are in. We use it to open the map on your city and to protect accounts. It is sent to a location-lookup service for that purpose only.',
+        'We use your data only to: verify identity, connect customer and driver, calculate fares, share your live ride with your trusted contact, keep everyone safe, and meet legal duties.',
         'The other person in a ride never sees your mobile number or email. KYC ID documents are seen only by Olub. Documents are stored encrypted.',
         'Ratings and comments are shown to the other person without your name. Olub administrators can see who wrote them, to handle complaints.',
         'Your rights (India DPDP Act 2023 and EU GDPR): get a copy of your data, correct it, delete it, withdraw consent, and complain. Use Profile → Privacy & my data. Requests are accepted only from accounts with a confirmed mobile number and email.',
