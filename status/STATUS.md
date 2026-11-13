@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **13 Nov 2026, 07:13 IST**
+Last updated: **14 Nov 2026, 01:32 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 107 complete · 11 in progress · 6 planned · 10 need you
+**Totals:** 110 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -49,7 +49,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 2.14 | Nearest cab is connected first; if they accept they come to the customer | ✅ Complete | 12 Nov 2026, 16:04 | If they decline or do not answer in 45 seconds, the next nearest is asked. Nobody left → cancelled, no fee |
 | 2.15 | Fare covers driver-to-customer distance plus the trip | ✅ Complete | 12 Nov 2026, 16:04 | Both at the vehicle's per-km rate, shown as separate lines |
 | 2.16 | Olub fee uses the total distance (10 km to reach + 1 km trip = 11 km → ₹15) | ✅ Complete | 12 Nov 2026, 16:04 | |
-| 2.17 | Online drivers share where they are waiting | 🟡 In progress | 12 Nov 2026, 16:04 | Works while the driver app is open. Sending position with the app in the background is not built yet |
+| 2.17 | Online drivers share where they are waiting | 🟡 In progress | 14 Nov 2026, 01:32 | Works while the driver app is open. The Android app now also sends the position with the screen off while the driver is online (shows an "You are online" notice). Built but not yet checked on a real phone |
 
 ## 3. Fare
 
@@ -184,6 +184,9 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.28 | In-app voice call checked end to end | ✅ Complete | 13 Nov 2026, 07:13 | Rings, answers, connects with audio and hangs up in the automated run. Fixed a fault that could leave the answering side showing "Connecting…". Still needs a relay server for some mobile networks |
 | 10.29 | Recent destinations and "Book this trip again" | ✅ Complete | 13 Nov 2026, 07:13 | |
 | 10.30 | Full self-review of every screen | ✅ Complete | 13 Nov 2026, 07:13 | Automated walk-through of over 40 screens in light and dark mode checks for errors, sideways scrolling, clipped text and small buttons. It found and I fixed: two screens that scrolled sideways, the call fault above, and the admin page jumping |
+| 10.31 | Ride request alert for drivers | ✅ Complete | 14 Nov 2026, 01:32 | Sound, vibration, the app jumps to the Drive tab, and a bar counts down the 45 seconds left to accept |
+| 10.32 | Live distance during a ride | ✅ Complete | 14 Nov 2026, 01:32 | "The cab is about 1.2 km away" before pickup and "About 6 km to go" during the ride, from the cab's GPS. An estimate from straight-line distance, not a road route |
+| 10.33 | Wording and layout fixes found in review | ✅ Complete | 14 Nov 2026, 01:32 | Admin compliance showed raw data instead of words; "1 ratings"; "0 km away"; date of birth and sex shown in plain form; rules list easier to read on a phone |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |

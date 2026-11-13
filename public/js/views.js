@@ -19,7 +19,7 @@ function connect() {
   S.es.addEventListener('call', (e) => Call.onSignal(JSON.parse(e.data)));
   S.es.addEventListener('loc', (e) => {
     const p = JSON.parse(e.data);
-    if (S.trip && p.tripId === S.trip.id) { S.trip.last = { ...p, digipin: Digipin.encode(p.lat, p.lng) }; if (S.map) S.map.setCar(p); const el = $('#livepin'); if (el) el.textContent = S.trip.last.digipin || ''; }
+    if (S.trip && p.tripId === S.trip.id) { S.trip.last = { ...p, digipin: Digipin.encode(p.lat, p.lng) }; if (S.map) S.map.setCar(p); const el = $('#livepin'); if (el) el.textContent = S.trip.last.digipin || ''; const d = $('#livedist'); if (d) d.textContent = liveDistance(S.trip); }
   });
   S.es.addEventListener('safety', (e) => onSafety(JSON.parse(e.data)));
   S.es.addEventListener('duty', run(async (e) => {
@@ -62,7 +62,10 @@ function cancelSheet(t) {
 async function refreshTrip() {
   const prevId = S.trip && S.trip.id;
   const cur = await api('GET', '/api/trips/current');
+  const known = new Set((S.requests || []).map((t) => t.id));
   S.trip = cur.trip; S.requests = cur.requests;
+  if (S.me && S.me.role === 'driver' && S.requestsLoaded && cur.requests.some((t) => !known.has(t.id))) { chime(); S.tab = 'home'; toast('New ride request', false, 'car'); }
+  S.requestsLoaded = true;
   if (prevId && !S.trip) {
     const old = await api('GET', `/api/trips/${prevId}`).catch(() => null);
     if (old && old.status === 'rejected') toast('Driver declined the ride', true);
@@ -84,7 +87,7 @@ function whereAmI() {
 function syncTracking() {
   const live = S.trip && ['accepted', 'started'].includes(S.trip.status);
   if (!live) return stopTracking();
-  if (Native && Native.startTracking && S.me.role === 'driver') Native.startTracking(S.base, S.token, String(S.trip.id)); // keeps working with the screen off
+  if (Native && Native.startTracking && S.me.role === 'driver') { Native.startTracking(S.base, S.token, String(S.trip.id)); S.nativeMode = 'trip'; } // keeps working with the screen off
   if (S.watchId != null || !navigator.geolocation) return;
   S.watchId = navigator.geolocation.watchPosition((p) => {
     if (!S.trip || Date.now() - S.lastPing < 6000) return;
@@ -95,6 +98,12 @@ function syncTracking() {
 // While a driver is online, tell Olub roughly where the cab is waiting so nearby customers can be matched.
 function syncPresence() {
   const on = S.me && S.me.role === 'driver' && S.me.driver.online;
+  const liveTrip = S.trip && ['accepted', 'started'].includes(S.trip.status);
+  if (Native && Native.startPresence) {
+    // Keeps the cab's waiting position fresh with the screen off, so nearby customers can still be matched.
+    if (on && !liveTrip) { Native.startPresence(S.base, S.token); S.nativeMode = 'presence'; }
+    else if (!on && S.nativeMode === 'presence') { Native.stopTracking(); S.nativeMode = null; }
+  }
   if (!on) { if (S.presenceId != null) { navigator.geolocation.clearWatch(S.presenceId); S.presenceId = null; } return; }
   if (S.presenceId != null || !navigator.geolocation) return;
   S.presenceId = navigator.geolocation.watchPosition((p) => {
@@ -105,7 +114,7 @@ function syncPresence() {
 }
 function stopTracking() {
   if (S.watchId != null) { navigator.geolocation.clearWatch(S.watchId); S.watchId = null; }
-  if (Native && Native.stopTracking) Native.stopTracking();
+  if (Native && Native.stopTracking && S.nativeMode === 'trip') { Native.stopTracking(); S.nativeMode = null; }
 }
 
 // ---------------- safety alarm (late ride, off route, SOS) ----------------
@@ -434,12 +443,20 @@ function steps(status) {
   return `<div class="steps">${STEP_ICONS.map(([, icon], k) => `${k ? `<div class="bar ${k <= i ? 'on' : ''}"><i></i></div>` : ''}<div class="s ${k <= i ? 'on' : ''} ${k === i && status !== 'completed' ? 'now' : ''}">${ic(icon)}</div>`).join('')}</div>`;
 }
 
+/** "1.2 km away" before pickup, "about 6 km to go" during the ride — from the cab's latest GPS. */
+function liveDistance(t) {
+  if (!t.last) return '';
+  const target = t.status === 'started' ? t.dst : t.src; const km = kmBetween(t.last, target) * 1.3;
+  if (t.status === 'accepted') return km < 0.15 ? 'The cab is at the pickup point' : `The cab is about ${km < 1 ? `${Math.round(km * 1000 / 50) * 50} m` : `${km.toFixed(1)} km`} away`;
+  return km < 0.2 ? 'Almost there' : `About ${km.toFixed(1)} km to go`;
+}
+
 function tripMapHtml(t) {
   return `<div id="tmap" class="map"></div>
     <div class="card flat" style="margin-top:-4px"><div class="route" style="pointer-events:none">
       <button><span class="dotp"></span><span class="t">${esc(t.src.name)}</span>${pinTag(t.src)}</button>
       <button><span class="dotd"></span><span class="t">${esc(t.dst.name)}</span>${pinTag(t.dst)}</button></div>
-      ${['accepted', 'started'].includes(t.status) ? `<p class="muted small" style="margin:8px 0 0">${ic('target')} Cab is at <span class="digipin" id="livepin">${esc((t.last && t.last.digipin) || 'waiting for GPS…')}</span></p>` : ''}</div>`;
+      ${['accepted', 'started'].includes(t.status) ? `<p class="muted small" style="margin:8px 0 0">${ic('target')} Cab is at <span class="digipin" id="livepin">${esc((t.last && t.last.digipin) || 'waiting for GPS…')}</span></p><p class="small" style="margin:6px 0 0;font-weight:650" id="livedist">${esc(liveDistance(t))}</p>` : ''}</div>`;
 }
 function mountTripMap(t) { const el = $('#tmap'); if (el) { S.map = makeMap(el, { src: t.src, dst: t.dst, last: t.last, polyline: t.routePolyline }); if (S.map) S.map.setHexGrid(t.src, []); } }
 
@@ -782,12 +799,12 @@ function renderProfile(app) {
   app.innerHTML = `
     <div class="idcard">${me.photo ? `<img src="${me.photo}" alt="" class="avatar" style="float:right;position:relative;z-index:1;width:72px;height:72px;border:2px solid #ffffff55">` : ''}<div class="muted small" style="color:#ffffffaa">${{ rider: 'OLUB CUSTOMER', driver: 'OLUB DRIVER', admin: 'OLUB ADMIN' }[me.role]}</div>
       <div class="pid">${esc(me.publicId)}</div><div style="font-size:20px;font-weight:800;margin-top:10px">${esc(me.name)}</div>
-      <div class="muted small" style="color:#ffffffcc">${[me.age && `${me.age} yrs`, me.gender, me.rating.count && `${ic('star', 'fill')} ${me.rating.average}`].filter(Boolean).join(' · ')}</div>
+      <div class="muted small" style="color:#ffffffcc">${[me.age && `${me.age} yrs`, cap(me.gender), me.rating.count && `${ic('star', 'fill')} ${me.rating.average.toFixed(1)}`].filter(Boolean).join(' · ')}</div>
       <div class="chips" style="margin-top:12px;position:relative;z-index:1"><span class="chip">${ic('check')}Mobile confirmed</span>
         <span class="chip ${me.emailVerified ? '' : 'warn'}">${ic(me.emailVerified ? 'check' : 'clock')}Email ${me.emailVerified ? 'confirmed' : 'not confirmed'}</span></div></div>
     ${todoCard()}
     <div class="card menu">
-      <button data-open="personal">${ic('id')}<span class="grow">Personal details<div class="muted small">${esc([me.dob, me.gender].filter(Boolean).join(' · ') || 'Photo, date of birth, sex')}</div></span>${ic('right')}</button>
+      <button data-open="personal">${ic('id')}<span class="grow">Personal details<div class="muted small">${esc([niceDate(me.dob), cap(me.gender)].filter(Boolean).join(' · ') || 'Photo, date of birth, sex')}</div></span>${ic('right')}</button>
       <button data-open="email">${ic('mail')}<span class="grow">Email<div class="muted small">${esc(me.email || 'Not added')}</div></span>${ic('right')}</button>
       ${me.role === 'rider' ? `<button data-open="trusted">${ic('heart')}<span class="grow">Trusted contact<div class="muted small">${me.trusted ? `${esc(me.trusted.name)} · ${esc(me.trusted.phone)}` : 'Required for rides'}</div></span>${ic('right')}</button>
         <button id="m-guests">${ic('users')}<span class="grow">People I book for</span>${ic('right')}</button>` : ''}

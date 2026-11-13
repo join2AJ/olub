@@ -4,4 +4,6 @@
     <string name="tracking_channel">Ride tracking</string>
     <string name="tracking_title">Olub ride in progress</string>
     <string name="tracking_text">Sharing this ride\'s live location for safety.</string>
+    <string name="presence_title">You are online on Olub</string>
+    <string name="presence_text">Sharing where your cab is waiting so nearby customers can find you.</string>
 </resources>

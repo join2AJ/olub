@@ -453,6 +453,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
       balanceDue: trip.paid_at ? 0 : r2(Math.max(0, bill.riderPays - (trip.prepaid_amount || 0))),
       invoiceNo: trip.invoice_no, safety: json(trip.safety),
       matched: !!trip.match_mode, matchAny: !!trip.match_any, pickupKm: trip.pickup_km || 0,
+      offerEndsAt: trip.match_mode && trip.status === 'requested' && trip.offered_at ? trip.offered_at + C.MATCH_OFFER_SECONDS * 1000 : null, serverNow: now(),
       cancellation: trip.status === 'cancelled' ? {
         by: trip.cancel_by, reason: trip.cancel_reason, fee: trip.cancel_fee, charged: trip.cancel_charged,
         youPay: trip.cancel_charged === (isRider ? 'rider' : 'driver') ? trip.cancel_fee : 0,

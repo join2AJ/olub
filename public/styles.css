@@ -430,3 +430,12 @@ input, select, textarea { border-radius: 15px; border-color: var(--line); }
 .fare td:first-child { padding-right: 10px; }
 .list > *, .card p, .kv dd, .audit { overflow-wrap: anywhere; }
 html, body { max-width: 100%; overflow-x: clip; }
+
+/* ---------- v0.10 polish ---------- */
+.grid2 > * { min-width: 0; } input[type=date] { min-width: 0; }
+.rules .kv { grid-template-columns: 1fr; gap: 2px 0; } .rules .kv dt { font-size: 12.5px; margin-top: 10px; } .rules .kv dd { text-align: left; font-weight: 550; }
+.offerbar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; margin: -2px 0 8px; } .offerbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--danger)); transform-origin: left; animation: drain linear forwards; }
+@keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.reqcard { animation: reqin .5s var(--ease) both, reqglow 1.6s ease-in-out 3; border-color: var(--brand) !important; }
+@keyframes reqin { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes reqglow { 50% { box-shadow: 0 0 0 6px rgba(12,107,65,.14); } }

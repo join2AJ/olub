@@ -28,6 +28,7 @@ import java.util.concurrent.Executors;
  * Stops when the ride ends (the app calls stopTracking) or the server says the ride is over.
  */
 public class TrackingService extends Service implements LocationListener {
+    static final String PRESENCE = "presence";
     private static final String CHANNEL = "olub_tracking";
     private static final long MIN_INTERVAL_MS = 8000;
     private static volatile String runningTripId;
@@ -55,9 +56,10 @@ public class TrackingService extends Service implements LocationListener {
         }
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
+        boolean presence = PRESENCE.equals(tripId);
         Notification n = b.setSmallIcon(R.drawable.ic_stat_olub)
-                .setContentTitle(getString(R.string.tracking_title))
-                .setContentText(getString(R.string.tracking_text))
+                .setContentTitle(getString(presence ? R.string.presence_title : R.string.tracking_title))
+                .setContentText(getString(presence ? R.string.presence_text : R.string.tracking_text))
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build();
@@ -92,7 +94,8 @@ public class TrackingService extends Service implements LocationListener {
     private void post(String body) {
         HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(server + "/api/trips/" + tripId + "/location").openConnection();
+            String path = PRESENCE.equals(tripId) ? "/api/driver/location" : "/api/trips/" + tripId + "/location";
+            c = (HttpURLConnection) new URL(server + path).openConnection();
             c.setRequestMethod("POST");
             c.setConnectTimeout(8000);
             c.setReadTimeout(8000);

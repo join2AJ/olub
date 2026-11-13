@@ -233,6 +233,12 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** While the driver is online: keep sending where the cab is waiting, even with the screen off. */
+        @JavascriptInterface
+        public void startPresence(final String server, final String token) {
+            startTracking(server, token, TrackingService.PRESENCE);
+        }
+
         @JavascriptInterface
         public void stopTracking() {
             runOnUiThread(() -> stopService(new Intent(MainActivity.this, TrackingService.class)));

@@ -88,7 +88,30 @@ const P = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
 };
 const ic = (name, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[name] || ''}</svg>`;
-const starsHtml = (r) => (r && r.count ? `<span class="stars">${ic('star', 'fill')} ${r.average.toFixed(1)}</span> <span class="muted small">(${r.count})</span>` : '<span class="chip grey">New</span>');
+const starsHtml = (r) => (r && r.count ? `<span class="stars">${ic('star', 'fill')} ${r.average.toFixed(1)}</span> <span class="muted small">${r.count} rating${r.count === 1 ? '' : 's'}</span>` : '<span class="chip grey">New</span>');
+
+// ---------- small formatters ----------
+const cap = (s) => (s ? String(s)[0].toUpperCase() + String(s).slice(1) : '');
+const niceDate = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const kmBetween = (a, b) => { // straight-line km
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+};
+/** A short two-tone chime for a new ride request (needs one earlier tap on the page, which signing in gives). */
+function chime() {
+  try {
+    const A = window.AudioContext || window.webkitAudioContext; if (!A) return;
+    const ctx = chime.ctx || (chime.ctx = new A()); if (ctx.state === 'suspended') ctx.resume();
+    [[880, 0], [1175, 0.18], [880, 0.5], [1175, 0.68]].forEach(([f, at]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + at); g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.16);
+      o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + at); o.stop(ctx.currentTime + at + 0.18);
+    });
+  } catch { /* sound is optional */ }
+  if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
+}
 
 // ---------- feedback ----------
 let toastTimer;

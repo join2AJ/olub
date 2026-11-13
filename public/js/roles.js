@@ -253,17 +253,18 @@ function renderDriver(app) {
         <p class="muted" style="margin:4px 0 0">${d.online ? 'Customers can scan your QR and book you.' : 'Go online to get customers.'}</p></div>
         <label class="switch" style="position:relative;z-index:1"><input type="checkbox" id="online" ${d.online ? 'checked' : ''}><i></i></label></div>
       <div class="chips" style="margin-top:12px;position:relative;z-index:1"><span class="chip">${ic('wallet')}${rs(d.wallet.balance)}</span>
-        ${d.vehicleNumber ? `<span class="plate">${esc(d.vehicleNumber)}</span>` : ''}<span class="chip">${ic('star')}${S.me.rating.count ? `${S.me.rating.average.toFixed(1)} · ${S.me.rating.count} ratings` : 'No ratings yet'}</span></div></div>
+        ${d.vehicleNumber ? `<span class="plate">${esc(d.vehicleNumber)}</span>` : ''}<span class="chip">${ic('star')}${S.me.rating.count ? `${S.me.rating.average.toFixed(1)} · ${plural(S.me.rating.count, 'rating')}` : 'No ratings yet'}</span></div></div>
     ${d.suspended ? `<div class="card alert"><b>${ic('alert')} Account on hold.</b> ${esc(d.suspended)}</div>` : ''}
     ${todoCard()}
     ${ready && !d.wallet.ok ? `<div class="card warn"><b>${ic('wallet')} Wallet below ${rs(d.wallet.min)}.</b> Top up to get customers. <button id="topup2" class="btn small" style="margin-top:8px">Top up</button></div>` : ''}
     ${d.status === 'submitted' ? `<div class="card soft">${ic('shield')} <b>Awaiting verification.</b> Your first customer can verify you in person (they get ${rs(S.cfg.verifyDiscount)} off, paid by Olub).</div>` : ''}
     ${d.status === 'rejected' ? `<div class="card alert">${ic('alert')} Documents were rejected. Please upload them again.</div>` : ''}
     <div class="card"><div class="between"><h2 style="margin:0">Ride requests</h2><button id="myqr" class="btn small ghost">${ic('target')}My QR</button></div>
-      ${S.requests.map((t) => `<div class="card flat" style="margin:12px 0 0">
+      ${S.requests.map((t) => `<div class="card flat reqcard" style="margin:12px 0 0">
+        ${t.offerEndsAt ? `<div class="offerbar" title="Time left to accept"><i style="animation-duration:${Math.max(1, Math.round((t.offerEndsAt - t.serverNow) / 1000))}s"></i></div><p class="muted small" style="margin:0 0 8px">${ic('clock')} Accept within ${Math.max(1, Math.round((t.offerEndsAt - t.serverNow) / 1000))} seconds, or it goes to the next cab.</p>` : ''}
         <div class="between"><b>${esc(t.guest ? `${t.guest.name} (guest of ${t.rider.name})` : t.rider.name)}</b>${starsHtml(t.rider.rating)}</div>
         <div class="route" style="pointer-events:none"><button><span class="dotp"></span><span class="t">${esc(t.src.name)}</span>${pinTag(t.src)}</button><button><span class="dotd"></span><span class="t">${esc(t.dst.name)}</span>${pinTag(t.dst)}</button></div>
-        <div class="chips"><span class="chip grey">${t.distanceKm} km · ${t.etaMin} min</span>${t.matched ? `<span class="chip warn">${ic('target')}Pickup is ${t.pickupKm} km away — paid for</span>` : ''}${t.pet ? `<span class="chip warn">${ic('paw')}With a pet</span>` : ''}<span class="chip grey">Pays at the ${esc(t.payTiming)}</span></div>
+        <div class="chips"><span class="chip grey">${t.distanceKm} km · ${t.etaMin} min</span>${t.matched && t.pickupKm >= 0.1 ? `<span class="chip warn">${ic('target')}Pickup is ${t.pickupKm} km away — you are paid for it</span>` : ''}${t.matched && t.pickupKm < 0.1 ? `<span class="chip">${ic('target')}Customer is right here</span>` : ''}${t.pet ? `<span class="chip warn">${ic('paw')}With a pet</span>` : ''}<span class="chip grey">Pays at the ${esc(t.payTiming)}</span></div>
         <div class="between" style="margin-top:10px"><div><div class="muted small">You keep</div><div class="bignum" style="font-size:26px">${rs(t.quote.driverFare)}</div></div>
           <div class="row"><button class="btn ghost" data-rej="${t.id}">Decline</button><button class="btn" data-acc="${t.id}">Accept</button></div></div></div>`).join('')
       || `<div class="empty">${d.online ? `<div class="radar" style="width:60px;height:60px">${ic('car')}</div><div>Waiting for customers…</div>` : `${ic('car')}<div>You are offline.</div>`}</div>`}</div>
@@ -420,6 +421,7 @@ const download = (name, text) => {
 };
 const kv = (o) => `<dl class="kv">${Object.entries(o).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
 const hm = (m) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+const counts = (o) => Object.entries(o || {}).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ') || 'None';
 
 const ADMIN = {
   async demo(pane) {
@@ -445,12 +447,12 @@ const ADMIN = {
         <div class="stat"><div class="v">${c.activeVehicleFlags}</div><div class="l">Vehicles flagged by police / RTO</div></div>
         <div class="stat ${c.auditLog.ok ? 'good' : ''}"><div class="v">${c.auditLog.ok ? 'Intact' : 'BROKEN'}</div><div class="l">Audit log${c.auditLog.ok ? ` · ${c.auditLog.entries} entries` : ` at #${c.auditLog.brokenAt}`}</div></div>
       </div>
-      <div class="card"><h2>Rules the app enforces</h2>${kv({ 'Driving hours': c.rules.dutyLimit, 'Platform fee': c.rules.commissionCap, 'Health check': c.rules.fitDeclaration, 'Cancellation fee': c.rules.cancellationFeeCap, Grievance: c.rules.grievanceOfficer })}</div>
+      <div class="card rules"><h2>Rules the app enforces</h2>${kv({ 'Driving hours': c.rules.dutyLimit, 'Platform fee': c.rules.commissionCap, 'Health check': c.rules.fitDeclaration, 'Cancellation fee': c.rules.cancellationFeeCap, Grievance: c.rules.grievanceOfficer })}</div>
       <div class="card"><h2>Drivers</h2>${kv({ Total: c.drivers.total, Verified: c.drivers.verified, 'Awaiting verification': c.drivers.awaitingVerification, 'Online now': c.drivers.online, 'On hold': c.drivers.suspended, 'Insurance expired': c.drivers.insuranceExpired, 'Wallet below minimum': c.drivers.walletBelowMinimum, 'Forced rests (30 days)': c.dutyLockouts30d })}
         ${c.drivers.insuranceExpiringSoon.length ? `<h3>Insurance expiring in 30 days</h3>${c.drivers.insuranceExpiringSoon.map((d) => `<div class="between small"><span>${esc(d.name)} · ${esc(d.vehicle)}</span><b>${esc(d.validTill)}</b></div>`).join('')}` : ''}</div>
       <div class="card"><h2>Driving hours today</h2><div class="list">${c.dutyHours.map((d) => `<div class="between"><div><b>${esc(d.name)}</b> <span class="plate">${esc(d.vehicle || '')}</span><div class="muted small">${esc(d.driverId)} · ${d.online ? 'online' : 'offline'}${d.restUntil ? ` · resting till ${when(d.restUntil)}` : ''}</div></div>
         <span class="chip ${d.locked ? 'danger' : d.remainingMin < 120 ? 'warn' : ''}">${hm(d.workedMin)} / 12h</span></div>`).join('') || '<p class="muted">No drivers yet.</p>'}</div></div>
-      <div class="card"><h2>Safety & requests</h2>${kv({ 'SOS pressed': c.safety.sos || 0, 'Route deviations': c.safety.route_deviation || 0, 'Late-ride alerts': c.lateAlerts, 'Privacy requests': JSON.stringify(c.privacyRequests), 'Police / RTO requests': JSON.stringify(c.authorityRequests) })}</div>
+      <div class="card"><h2>Safety & requests</h2>${kv({ 'SOS pressed': c.safety.sos || 0, 'Route deviations': c.safety.route_deviation || 0, 'Late-ride alerts': c.lateAlerts, 'Privacy requests': counts(c.privacyRequests), 'Police / RTO requests': counts(c.authorityRequests) })}</div>
       <div class="card"><h2>Trip register for authorities</h2><p class="muted small">Every trip with driver, vehicle, DIGIPINs, fare, GST and the fit-to-drive record. Hand this over when a transport authority asks.</p>
         <div class="grid2"><div><label class="f">From</label><input id="r-from" type="date"></div><div><label class="f">To</label><input id="r-to" type="date"></div></div>
         <button id="r-dl" class="btn block">${ic('download')}Download CSV</button></div>`;
