@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **14 Nov 2026, 01:32 IST**
+Last updated: **14 Nov 2026, 01:49 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 110 complete · 11 in progress · 6 planned · 10 need you
+**Totals:** 113 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -187,6 +187,9 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.31 | Ride request alert for drivers | ✅ Complete | 14 Nov 2026, 01:32 | Sound, vibration, the app jumps to the Drive tab, and a bar counts down the 45 seconds left to accept |
 | 10.32 | Live distance during a ride | ✅ Complete | 14 Nov 2026, 01:32 | "The cab is about 1.2 km away" before pickup and "About 6 km to go" during the ride, from the cab's GPS. An estimate from straight-line distance, not a road route |
 | 10.33 | Wording and layout fixes found in review | ✅ Complete | 14 Nov 2026, 01:32 | Admin compliance showed raw data instead of words; "1 ratings"; "0 km away"; date of birth and sex shown in plain form; rules list easier to read on a phone |
+| 10.34 | Modern map | ✅ Complete | 14 Nov 2026, 01:49 | Sharp vector map in Olub's own colours (light and dark) in place of the old picture tiles; cleaner pins and a button to recentre. Map data comes from the free OpenFreeMap service (no key, no uptime promise). If a phone cannot draw it, the app falls back to the old map by itself. Checked in the browser, not yet on a real phone |
+| 10.35 | Tap a heading to reveal details | ✅ Complete | 14 Nov 2026, 01:49 | Long pages are now short lists of headings with a one-line summary; tapping one opens it and the app remembers what you left open. Used on passenger Activity and Safety, driver Earnings and Vehicle pages, admin Compliance, and "Cab right in front of you?" on the booking screen |
+| 10.36 | Map on the driver's home screen | ✅ Complete | 14 Nov 2026, 01:49 | Shows where the cab is and the search grid while online |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |

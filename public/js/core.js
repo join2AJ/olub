@@ -113,6 +113,22 @@ function chime() {
   if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
 }
 
+// ---------- tap a heading to reveal what is under it ----------
+function foldify(root) {
+  if (!S.folds) { try { S.folds = JSON.parse(store('olub_folds') || '{}'); } catch { S.folds = {}; } }
+  $$('.card[data-fold]:not(.fold)', root || document).forEach((card) => {
+    const h = card.querySelector(':scope > h2'); if (!h) return;
+    const key = card.dataset.fold; const open = key in S.folds ? S.folds[key] : card.hasAttribute('data-open');
+    const head = document.createElement('button'); head.type = 'button'; head.className = 'foldhead';
+    head.innerHTML = `<span class="ft"><b>${h.innerHTML}</b>${card.dataset.sum ? `<span class="foldsum">${esc(card.dataset.sum)}</span>` : ''}</span><span class="chev">${ic('down')}</span>`;
+    const body = document.createElement('div'); body.className = 'foldbody'; const inner = document.createElement('div'); inner.className = 'foldin'; body.appendChild(inner);
+    h.remove(); while (card.firstChild) inner.appendChild(card.firstChild);
+    card.append(head, body); card.classList.add('fold'); card.classList.toggle('open', open); head.setAttribute('aria-expanded', open);
+    head.onclick = () => { const now = !card.classList.contains('open'); card.classList.toggle('open', now); head.setAttribute('aria-expanded', now); S.folds[key] = now; store('olub_folds', JSON.stringify(S.folds)); };
+  });
+}
+if (window.MutationObserver) document.addEventListener('DOMContentLoaded', () => { const app = document.getElementById('app'); if (app) new MutationObserver(() => foldify(app)).observe(app, { childList: true, subtree: true }); });
+
 // ---------- feedback ----------
 let toastTimer;
 function toast(msg, err = false, icon = null) {
@@ -196,14 +212,31 @@ function decodePolyline(str) {
 }
 
 // ---------- maps (Leaflet + OpenStreetMap tiles) ----------
+const MAP_BASE = ((document.currentScript && document.currentScript.src) || '').replace(/js\/core\.js.*$/, 'vendor/map/');
+const canVector = () => {
+  if (canVector.v != null) return canVector.v;
+  try { const c = document.createElement('canvas'); canVector.v = !!(window.maplibregl && L.maplibreGL && (c.getContext('webgl2') || c.getContext('webgl'))); } catch { canVector.v = false; }
+  return canVector.v;
+};
+
 function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
   if (!window.L) { el.innerHTML = '<div class="empty">Map unavailable</div>'; return null; }
   // Opens on the user's city (from GPS, else the IP address, else the default city) rather than a map of all India.
   const home = S.where || (S.cfg && S.cfg.defaultCity) || { lat: 28.6139, lng: 77.209 };
-  const map = L.map(el, { zoomControl: false, attributionControl: true }).setView([home.lat, home.lng], 12);
+  const map = L.map(el, { zoomControl: false, attributionControl: true, maxZoom: 19 }).setView([home.lat, home.lng], 12);
   // Quiet, greyed basemap so the route and cabs stand out (dark at night).
   const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); // toned down in CSS
+  // A sharp vector map in Olub's own colours; if the phone cannot draw it, the plain picture map is used instead.
+  const plain = () => { el.classList.remove('vecmap'); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); };
+  if (canVector()) {
+    try {
+      const vec = L.maplibreGL({ style: `${MAP_BASE}olub-${dark ? 'dark' : 'light'}.json`, attribution: '© OpenStreetMap · OpenFreeMap', interactive: false }).addTo(map);
+      el.classList.add('vecmap'); let ok = false; const gl = vec.getMaplibreMap();
+      gl.on('load', () => { ok = true; });
+      gl.on('error', () => { if (!ok && el.classList.contains('vecmap')) { ok = true; try { vec.remove(); } catch { /* gone */ } canVector.v = false; plain(); } });
+    } catch { canVector.v = false; plain(); }
+  } else plain();
+  map.attributionControl.setPrefix(false);
   const icon = (cls, html = '') => L.divIcon({ className: '', html: `<div class="mk ${cls}">${html}</div>`, iconSize: cls === 'car' ? [34, 34] : [18, 18], iconAnchor: cls === 'car' ? [17, 17] : [9, 9] });
   const h = { map, car: null, line: null, trail: null, layers: [], hexLayers: [], cabLayers: [] };
   const INK = dark ? '#ffffff' : '#111a16';
@@ -278,6 +311,18 @@ function makeMap(el, { src, dst, last, path, onPick, polyline } = {}) {
     if (h.trail) h.trail.remove();
     if (pts && pts.length > 1) h.trail = L.polyline(pts.map((p) => [p.lat, p.lng]), { color: '#ffb300', weight: 5, opacity: .95 }).addTo(map);
   };
+  // One tap brings the map back to the route, the cab or where you are.
+  const Recentre = L.Control.extend({ options: { position: 'bottomright' }, onAdd() {
+    const b = L.DomUtil.create('button', 'mapbtn'); b.type = 'button'; b.setAttribute('aria-label', 'Recentre the map'); b.innerHTML = ic('target');
+    L.DomEvent.disableClickPropagation(b);
+    b.onclick = () => {
+      const pts = h.layers.filter((l) => l.getLatLng).map((l) => l.getLatLng()); if (h.car) pts.push(h.car.getLatLng());
+      if (pts.length > 1) map.flyToBounds(pts, { padding: [36, 36], duration: .6 }); else if (pts.length === 1) map.flyTo(pts[0], 15, { duration: .6 });
+      else if (h.hexOrigin) map.flyTo([h.hexOrigin.lat, h.hexOrigin.lng], 14, { duration: .6 });
+    };
+    return b;
+  } });
+  map.addControl(new Recentre());
   h.setRoute(src, dst, polyline); h.setCar(last); h.setTrail(path);
   if (onPick) map.on('click', (e) => onPick({ lat: e.latlng.lat, lng: e.latlng.lng }));
   setTimeout(() => { if (el.isConnected && map._loaded) map.invalidateSize(); }, 60);

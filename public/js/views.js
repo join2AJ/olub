@@ -145,7 +145,7 @@ const TABS = {
 
 const viewKey = () => (S.me ? `${S.me.role}:${S.tab}:${S.sub || ''}:${S.trip ? 'trip' : ''}` : 'auth');
 /** Put the page back where the user was. Called again by screens that load their content after a moment. */
-function applyScroll() { if (S.keepScroll != null) window.scrollTo(0, S.keepScroll); }
+function applyScroll() { foldify($('#app')); if (S.keepScroll != null) window.scrollTo(0, S.keepScroll); }
 
 function render() {
   const app = $('#app');
@@ -671,10 +671,10 @@ async function renderInsights(app) {
   const chartCard = `<div class="card"><div class="between"><h2 style="margin:0">When you ${driver ? 'drive' : 'ride'}</h2></div>
       <div class="seg" id="groupby" style="margin:10px 0 12px">${[['month', 'Month'], ['date', 'Date'], ['weekday', 'Day'], ['hour', 'Hour']].map(([k, l]) => `<button data-g="${k}" class="${G === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div id="chartbox">${chartFor(G)}</div></div>`;
-  const breakdown = `<div class="card"><h2>Bookings · ${esc(r.label)}</h2><div class="segmeter"><i style="width:${pct(nDone)}%;background:var(--brand)"></i><i style="width:${pct(nLive)}%;background:var(--accent)"></i><i style="width:${pct(nCan)}%;background:var(--danger)"></i></div>
+  const breakdown = `<div class="card" data-fold="in-bookings" data-sum="${nDone} completed · ${trips.length - nDone - nLive} cancelled"><h2>Bookings</h2><div class="segmeter"><i style="width:${pct(nDone)}%;background:var(--brand)"></i><i style="width:${pct(nLive)}%;background:var(--accent)"></i><i style="width:${pct(nCan)}%;background:var(--danger)"></i></div>
       <div class="legend"><span><i style="background:var(--brand)"></i>${nDone} completed</span><span><i style="background:var(--accent)"></i>${nLive} live</span><span><i style="background:var(--danger)"></i>${nCan} cancelled or declined</span></div></div>`;
-  const places = x.topPlaces.length ? `<div class="card"><h2>Top destinations</h2>${x.topPlaces.map((p) => `<div class="between" style="padding:6px 0"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ic('pin')} ${esc(p.name)}</span><b>${p.visits}×</b></div>`).join('')}</div>` : '';
-  const downloads = `<div class="card"><h2>Download</h2><p class="muted small" style="margin:0 0 10px">Your ${driver ? 'earnings' : 'rides'} for ${esc(r.label)}.</p><div class="grid2"><button class="btn ghost" id="dl-xls">${ic('file')}Excel</button><button class="btn ghost" id="dl-jpg">${ic('camera')}JPG</button></div></div>`;
+  const places = x.topPlaces.length ? `<div class="card" data-fold="in-places" data-sum="${esc(x.topPlaces[0].name)}"><h2>Top destinations</h2>${x.topPlaces.map((p) => `<div class="between" style="padding:6px 0"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ic('pin')} ${esc(p.name)}</span><b>${p.visits}×</b></div>`).join('')}</div>` : '';
+  const downloads = `<div class="card" data-fold="in-dl" data-sum="Excel or JPG"><h2>Download</h2><p class="muted small" style="margin:0 0 10px">Your ${driver ? 'earnings' : 'rides'} for ${esc(r.label)}.</p><div class="grid2"><button class="btn ghost" id="dl-xls">${ic('file')}Excel</button><button class="btn ghost" id="dl-jpg">${ic('camera')}JPG</button></div></div>`;
   const safetyTile = `<div class="stat"><div class="v">${x.safety.average != null ? x.safety.average : '—'}<span class="muted small">/100</span></div><div class="l">Safety score${x.safety.trips ? ` · ${x.safety.overspeed} overspeed, ${x.safety.harshBrakes} harsh braking` : ''}</div></div>`;
 
   if (!driver) {
@@ -693,7 +693,7 @@ async function renderInsights(app) {
         <div class="muted small">${wallet.ok ? `Keep at least ${rs(wallet.min)} to get customers` : `Below ${rs(wallet.min)} — top up to get customers`}</div></div>
         <button id="topup" class="btn accent" style="position:relative;z-index:1">${ic('plus')}Top up</button></div></div>
       ${periodBar()}${dash}${chartCard}
-      <div class="card"><h2>Your time on the road</h2>
+      <div class="card" data-fold="in-road" data-open data-sum="${hm(x.hours.onlineMin)} online"><h2>Your time on the road</h2>
         <table class="fare"><tr><td>${ic('clock')} Online</td><td>${hm(h.onlineMin)}</td></tr>
           <tr><td>${ic('car')} With a passenger</td><td>${hm(h.withPassengerMin)}</td></tr>
           <tr><td>${ic('nav')} Going to pickups</td><td>${hm(h.toPickupMin)}</td></tr>
@@ -706,19 +706,19 @@ async function renderInsights(app) {
         <div class="stat"><div class="v">${rs(x.sel.totalGst)}</div><div class="l">GST collected and remitted</div></div>
         <div class="stat"><div class="v">${rs(x.sel.platformFees)}</div><div class="l">Olub trip fees</div></div>
         <div class="stat"><div class="v">${rs(x.sel.km ? Math.round((x.sel.driverKeeps / x.sel.km) * 100) / 100 : 0)}</div><div class="l">Kept per km</div></div>${safetyTile}</div>
-      <div class="card"><h2>Money earned vs GST · ${esc(r.label)}</h2><table class="fare">
+      <div class="card" data-fold="in-gst" data-sum="${esc(r.label)}"><h2>Money earned vs GST</h2><table class="fare">
         <tr><td>Customers paid you</td><td>${rs(x.sel.riderPaid)}</td></tr>
         <tr><td>GST on rides (Olub remits)</td><td>−${rs(x.sel.rideGst)}</td></tr>
         <tr><td>Olub fees <span class="muted small">incl. ${rs(x.sel.platformFeeGst)} GST</span></td><td>−${rs(x.sel.platformFees)}</td></tr>
         <tr class="sub"><td colspan="2">Includes ${rs(x.sel.tolls)} of tolls you paid on the way.</td></tr>
         <tr class="total"><td>You kept</td><td>${rs(x.sel.driverKeeps)}</td></tr></table></div>
-      ${x.monthly ? `<div class="card"><h2>Monthly charge</h2>
+      ${x.monthly ? `<div class="card" data-fold="in-monthly" data-sum="${rs(x.monthly.thisMonth.amount)} if the month ended today"><h2>Monthly charge</h2>
         <p class="muted small">${rs(x.monthly.max)} or ${x.monthly.sharePercent}% of what you earned in the month, whichever is less. Taken from your wallet on the 1st. Olub's total (trip fees + this) never goes above 20% of your earnings.</p>
         <table class="fare"><tr><td>Earned this month so far</td><td>${rs(x.monthly.thisMonth.earned)}</td></tr><tr><td>Trip fees already paid</td><td>${rs(x.monthly.thisMonth.tripFees)}</td></tr>
         <tr class="total"><td>Charge if the month ended today</td><td>${rs(x.monthly.thisMonth.amount)}</td></tr></table>
         ${x.monthly.past.map((m) => `<div class="between small" style="padding:4px 0"><span class="muted">${esc(m.month)} · earned ${rs(m.earned)}</span><b>${rs(m.amount)}</b></div>`).join('')}</div>` : ''}
       ${places}${downloads}
-      <div class="card"><h2>Wallet activity</h2><div class="list">${wallet.txns.slice(0, S.walletAll ? 100 : 8).map((t) => `<div class="txn"><div><b>${WALLET_WORD[t.type] || t.type}</b>
+      <div class="card" data-fold="in-wallet" data-sum="${wallet.txns.length ? `${Math.min(wallet.txns.length, 100)} entries` : 'Nothing yet'}"><h2>Wallet activity</h2><div class="list">${wallet.txns.slice(0, S.walletAll ? 100 : 8).map((t) => `<div class="txn"><div><b>${WALLET_WORD[t.type] || t.type}</b>
         <div class="muted small">${when(t.ts)}${t.tripId ? ` · trip #${t.tripId}` : ''}</div></div><span class="a ${t.amount >= 0 ? 'cr' : 'dr'}">${t.amount >= 0 ? '+' : '−'}${rs(Math.abs(t.amount))}</span></div>`).join('') || '<p class="muted">No activity yet.</p>'}</div>
         ${wallet.txns.length > 8 && !S.walletAll ? `<button class="btn ghost block" id="wmore">Show all ${wallet.txns.length}</button>` : ''}</div>`;
   }
@@ -766,7 +766,7 @@ function renderSafety(app) {
     <div class="card hero"><h1 style="margin:0">Your safety</h1><p class="muted" style="margin:6px 0 0">Every Olub ride is tracked, and someone you trust can follow it.</p></div>
     <div class="card"><div class="between"><h2 style="margin:0">Trusted contact</h2><button class="btn small ghost" id="s-edit">${t ? 'Change' : 'Add'}</button></div>
       ${t ? `<p style="margin:8px 0 0"><b>${esc(t.name)}</b>${t.relation ? ` · ${esc(t.relation)}` : ''}<br><span class="muted">${esc(t.phone)}</span></p>` : '<p class="muted" style="margin:8px 0 0">Required before your first ride.</p>'}</div>
-    <div class="card"><h2>On every ride</h2>
+    <div class="card" data-fold="sf-every" data-open data-sum="What Olub does to keep you safe"><h2>On every ride</h2>
       ${feat('share', 'Live tracking link', `${t ? esc(t.name) : 'Your contact'} can watch the cab on a map, with its DIGIPIN, without installing anything.`)}
       ${feat('clock', 'Late-ride alert', `If you are ${S.cfg.overdue.warn} minutes late your contact is told; at ${S.cfg.overdue.alert} minutes they are asked to check on you.`)}
       ${feat('nav', 'Off-route alarm', 'If the cab leaves the expected road, you and your contact are alerted.')}

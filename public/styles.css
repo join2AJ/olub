@@ -439,3 +439,30 @@ html, body { max-width: 100%; overflow-x: clip; }
 .reqcard { animation: reqin .5s var(--ease) both, reqglow 1.6s ease-in-out 3; border-color: var(--brand) !important; }
 @keyframes reqin { from { opacity: 0; transform: translateY(10px) scale(.98); } }
 @keyframes reqglow { 50% { box-shadow: 0 0 0 6px rgba(12,107,65,.14); } }
+
+/* ---------- v0.11: vector map, tap-to-reveal sections ---------- */
+.vecmap .leaflet-tile-pane { filter: none !important; } .vecmap.leaflet-container { background: #f4f5f1; }
+@media (prefers-color-scheme: dark) { .vecmap.leaflet-container { background: #0f1513; } }
+.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { display: none; }
+.map { box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, var(--shadow); }
+.mapbtn { width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--card); color: var(--ink); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0,0,0,.22); margin: 0 12px 26px 0 !important; cursor: pointer; transition: transform .15s var(--ease); }
+.mapbtn:active { transform: scale(.92); } .mapbtn svg.i { width: 20px; height: 20px; }
+.map.hero-map::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46px; background: linear-gradient(transparent, color-mix(in srgb, var(--bg) 85%, transparent)); pointer-events: none; z-index: 450; }
+.leaflet-control-attribution { background: transparent !important; color: var(--muted) !important; font-size: 9px !important; } .leaflet-control-attribution a { color: inherit !important; }
+.mk { width: 16px; height: 16px; background: #111a16; border: 3px solid #fff; box-shadow: 0 0 0 5px rgba(17,26,22,.12), 0 2px 6px rgba(0,0,0,.3); }
+.mk.d { background: #111a16; border-radius: 4px; }
+.mk.car { background: var(--brand); color: #fff; border: 3px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.hexcell { stroke-opacity: .12; }
+
+.card.fold { padding-top: 0; padding-bottom: 0; }
+.foldhead { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 62px; padding: 12px 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.foldhead .ft { flex: 1; min-width: 0; display: grid; gap: 2px; } .foldhead .ft b { font-size: 17px; font-weight: 750; letter-spacing: -.01em; display: flex; align-items: center; gap: 6px; }
+.foldsum { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .2s; }
+.foldhead .chev { flex: 0 0 34px; height: 34px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; color: var(--brand); transition: transform .3s var(--ease), background .2s; }
+.foldhead .chev svg.i { width: 18px; height: 18px; }
+.fold.open > .foldhead .chev { transform: rotate(180deg); background: color-mix(in srgb, var(--brand) 14%, var(--card)); } .fold.open > .foldhead .foldsum { opacity: .0; height: 0; }
+.foldhead:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 10px; }
+.foldbody { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .32s var(--ease); }
+.foldbody > .foldin { overflow: hidden; min-height: 0; visibility: hidden; transition: visibility 0s .32s; }
+.fold.open > .foldbody { grid-template-rows: 1fr; } .fold.open > .foldbody > .foldin { visibility: visible; transition-delay: 0s; padding-bottom: 16px; }
+@media (prefers-reduced-motion: reduce) { .foldbody, .foldhead .chev { transition: none; } }

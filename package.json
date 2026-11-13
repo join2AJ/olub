@@ -1,6 +1,6 @@
 {
   "name": "olub",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Olub — book the cab in front of you. ₹5 per trip, rest goes to the driver.",
   "main": "src/server.js",
   "scripts": {

@@ -88,7 +88,8 @@ async function prefsSheet() {
   });
 }
 
-// Choose a row above, then press the one button below — like Ola.
+const SEATS = { bike: 1, auto: 3, hatchback: 4, sedan: 4, suv: 6 };
+// Choose a row above, then press the one button below.
 function showEstimate() {
   const e = S.estimate; const b = S.booking; const n = S.nearby || { options: [] };
   b.payTiming = b.payTiming || 'end';
@@ -97,7 +98,7 @@ function showEstimate() {
   const lo = opts.length ? Math.min(...opts.map((o) => o.riderPays)) : 0, hi = opts.length ? Math.max(...opts.map((o) => o.riderPays)) : 0;
   const fastest = opts.length ? [...opts].sort((p, q) => p.awayMin - q.awayMin)[0] : null;
   const rows = opts.length ? [{ key: 'any', label: 'Book Any', min: fastest.awayMin, price: lo === hi ? rs(lo) : `${rs(lo)} - ${rs(hi)}`, sub: opts.map((o) => o.label).join(', '), count: opts.reduce((s, o) => s + o.count, 0), icon: 'sparkle', fast: true },
-    ...opts.map((o) => ({ key: o.type, label: o.label, min: o.awayMin, price: rs(o.riderPays), sub: `${o.awayKm} km away${o.rating.count ? ` · rated ${o.rating.average.toFixed(1)}` : ''}`, count: o.count, icon: VEH_ICON[o.type] }))] : [];
+    ...opts.map((o) => ({ key: o.type, label: o.label, min: o.awayMin, price: rs(o.riderPays), sub: `${SEATS[o.type] || 4} seat${SEATS[o.type] === 1 ? '' : 's'} · ${o.awayKm} km away${o.rating.count ? ` · rated ${o.rating.average.toFixed(1)}` : ''}`, count: o.count, icon: VEH_ICON[o.type] }))] : [];
   if (!rows.some((r) => r.key === b.pick)) b.pick = 'any';
   const sel = rows.find((r) => r.key === b.pick);
   $('#est').innerHTML = `
@@ -115,7 +116,7 @@ function showEstimate() {
       <div class="bb-row"><button id="paytoggle">${ic('wallet')}<span>Pay at the ${b.payTiming}</span></button><button id="prefs">${ic('gear')}<span>Preferences${b.pet || b.forGuest ? ` · ${[b.forGuest && 'guest', b.pet && 'pet'].filter(Boolean).join(', ')}` : ''}</span></button></div>
       ${rows.length ? `<button id="book" class="btn dark block">Book ${esc(sel.key === 'any' ? 'Any' : sel.label)} · ${sel.price}</button>` : ''}
     </div>
-    <div class="card"><h2>Cab right in front of you?</h2>
+    <div class="card" data-fold="front" ${rows.length ? '' : 'data-open'} data-sum="Scan its QR or type the number plate"><h2>Cab right in front of you?</h2>
       <p class="muted small" style="margin:0 0 4px">No waiting and no charge for coming to you. Typical fares for this trip:</p>
       <div class="chips" style="margin:8px 0">${e.options.map((o) => `<span class="chip grey">${esc(o.label)} ${rs(o.riderPays)}</span>`).join('')}</div>
       <button id="scan" class="btn accent block">${ic('camera')}Scan driver's QR</button>
@@ -259,6 +260,7 @@ function renderDriver(app) {
     ${ready && !d.wallet.ok ? `<div class="card warn"><b>${ic('wallet')} Wallet below ${rs(d.wallet.min)}.</b> Top up to get customers. <button id="topup2" class="btn small" style="margin-top:8px">Top up</button></div>` : ''}
     ${d.status === 'submitted' ? `<div class="card soft">${ic('shield')} <b>Awaiting verification.</b> Your first customer can verify you in person (they get ${rs(S.cfg.verifyDiscount)} off, paid by Olub).</div>` : ''}
     ${d.status === 'rejected' ? `<div class="card alert">${ic('alert')} Documents were rejected. Please upload them again.</div>` : ''}
+    ${d.online ? '<div id="dmap" class="map" style="height:190px"></div>' : ''}
     <div class="card"><div class="between"><h2 style="margin:0">Ride requests</h2><button id="myqr" class="btn small ghost">${ic('target')}My QR</button></div>
       ${S.requests.map((t) => `<div class="card flat reqcard" style="margin:12px 0 0">
         ${t.offerEndsAt ? `<div class="offerbar" title="Time left to accept"><i style="animation-duration:${Math.max(1, Math.round((t.offerEndsAt - t.serverNow) / 1000))}s"></i></div><p class="muted small" style="margin:0 0 8px">${ic('clock')} Accept within ${Math.max(1, Math.round((t.offerEndsAt - t.serverNow) / 1000))} seconds, or it goes to the next cab.</p>` : ''}
@@ -269,6 +271,12 @@ function renderDriver(app) {
           <div class="row"><button class="btn ghost" data-rej="${t.id}">Decline</button><button class="btn" data-acc="${t.id}">Accept</button></div></div></div>`).join('')
       || `<div class="empty">${d.online ? `<div class="radar" style="width:60px;height:60px">${ic('car')}</div><div>Waiting for customers…</div>` : `${ic('car')}<div>You are offline.</div>`}</div>`}</div>
     ${ready ? dutyCard(d) : ''}`;
+  if ($('#dmap')) {
+    S.map = makeMap($('#dmap'), {});
+    const here = (p) => { if (!S.map || !$('#dmap')) return; S.herePos = p; S.map.setHexGrid(p, []); S.map.setCar(p); S.map.map.setView([p.lat, p.lng], 14); };
+    if (S.herePos) here(S.herePos); else if (S.where) S.map.setHexGrid(S.where, []);
+    if (!S.herePos) myLocation().then(here).catch(() => {});
+  }
   bindTodos(app);
   if ($('#topup2')) $('#topup2').onclick = topupSheet;
   $('#myqr').onclick = () => (d.vehicleNumber ? qrSheet() : toast('Add your vehicle first', true));
@@ -293,7 +301,7 @@ function renderVehicle(app) {
   const today = new Date().toISOString().slice(0, 10);
   app.innerHTML = `
     <button class="btn small ghost" id="back" style="margin-bottom:10px">${ic('left')}Back</button>
-    <div class="card"><h2>Your vehicle</h2><p class="muted small">Status: <b>${esc(d.status)}</b></p>
+    <div class="card" data-fold="v-veh" data-open data-sum="${esc(d.vehicleNumber || 'Not added')}"><h2>Your vehicle</h2><p class="muted small">Status: <b>${esc(d.status)}</b></p>
       <label class="f">Vehicle number</label><div class="plate-in"><span class="ind">IND</span><input id="v-num" value="${esc(d.vehicleNumber || '')}" placeholder="KA01AB1234" autocapitalize="characters"></div>
       <div class="grid2"><div><label class="f">Type</label><select id="v-type">${Object.entries(S.cfg.vehicles).map(([k, v]) => `<option value="${k}" ${d.vehicleType === k ? 'selected' : ''}>${v.label} · ${rs(v.perKm)}/km</option>`).join('')}</select></div>
         <div><label class="f">Condition</label><select id="v-cond">${S.cfg.conditions.map((c) => `<option ${(d.condition || 'good') === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>
@@ -302,7 +310,7 @@ function renderVehicle(app) {
       <label class="f">Commercial permit / badge number</label><input id="v-permit" value="${esc(d.permitNo || '')}" autocapitalize="characters">
       <label class="f">Vehicle insurance valid till</label><input id="v-ins" type="date" min="${today}" value="${esc(d.insuranceValidTill || '')}">
     </div>
-    <div class="card"><h2>Licence & KYC</h2>
+    <div class="card" data-fold="v-kyc" ${d.status === 'verified' ? '' : 'data-open'} data-sum="Licence, ID and documents"><h2>Licence & KYC</h2>
       <label class="f">Driving licence number</label><input id="v-dl" value="${esc(d.licenseNo || '')}" autocapitalize="characters">
       <label class="f">Licence first issued on <span class="muted">(shows your driving experience)</span></label><input id="v-dli" type="date" max="${today}" value="${esc(d.licenseIssuedOn || '')}">
       <label class="f">RC number</label><input id="v-rc" value="${esc(d.rcNo || '')}" autocapitalize="characters">
@@ -310,7 +318,7 @@ function renderVehicle(app) {
       <h3>Photos</h3><div class="docgrid">${Object.entries(docLabel).map(([k, l]) => `<label class="${docs[k] ? 'done' : ''}" id="l-${k}">${ic(docs[k] ? 'check' : 'camera')}<span>${l}</span><input type="file" accept="image/*,application/pdf" data-doc="${k}"></label>`).join('')}</div>
       <p class="muted small" style="margin-top:8px">${ic('lock')} Stored encrypted. Customers see only your photo and the vehicle photo.</p>
     </div>
-    <div class="card"><h2>My cab rules</h2><p class="muted small">Customers see these before booking.</p>
+    <div class="card" data-fold="v-rules" ${d.status === 'verified' ? '' : 'data-open'} data-sum="Smoking, pets and more"><h2>My cab rules</h2><p class="muted small">Customers see these before booking.</p>
       ${Object.entries(S.cfg.driverRules).map(([k, l]) => `<div class="toggle"><span>${ic('ban')} ${esc(l)}</span><label class="switch"><input type="checkbox" data-rule="${k}" ${prefs[k] ? 'checked' : ''}><i></i></label></div>`).join('')}
       <div class="toggle"><span>${ic('paw')} I am OK to travel with pets</span><label class="switch"><input type="checkbox" id="v-pets" ${prefs.petsOk ? 'checked' : ''}><i></i></label></div>
       <div id="petbox" ${prefs.petsOk ? '' : 'hidden'}><label class="f">Extra charge for a pet (₹0–${S.cfg.maxPetCharge})</label><input id="v-petc" type="number" inputmode="numeric" value="${prefs.petCharge || 0}"></div>
@@ -447,13 +455,13 @@ const ADMIN = {
         <div class="stat"><div class="v">${c.activeVehicleFlags}</div><div class="l">Vehicles flagged by police / RTO</div></div>
         <div class="stat ${c.auditLog.ok ? 'good' : ''}"><div class="v">${c.auditLog.ok ? 'Intact' : 'BROKEN'}</div><div class="l">Audit log${c.auditLog.ok ? ` · ${c.auditLog.entries} entries` : ` at #${c.auditLog.brokenAt}`}</div></div>
       </div>
-      <div class="card rules"><h2>Rules the app enforces</h2>${kv({ 'Driving hours': c.rules.dutyLimit, 'Platform fee': c.rules.commissionCap, 'Health check': c.rules.fitDeclaration, 'Cancellation fee': c.rules.cancellationFeeCap, Grievance: c.rules.grievanceOfficer })}</div>
-      <div class="card"><h2>Drivers</h2>${kv({ Total: c.drivers.total, Verified: c.drivers.verified, 'Awaiting verification': c.drivers.awaitingVerification, 'Online now': c.drivers.online, 'On hold': c.drivers.suspended, 'Insurance expired': c.drivers.insuranceExpired, 'Wallet below minimum': c.drivers.walletBelowMinimum, 'Forced rests (30 days)': c.dutyLockouts30d })}
+      <div class="card rules" data-fold="a-rules" data-sum="Hours, fees, health check, grievance"><h2>Rules the app enforces</h2>${kv({ 'Driving hours': c.rules.dutyLimit, 'Platform fee': c.rules.commissionCap, 'Health check': c.rules.fitDeclaration, 'Cancellation fee': c.rules.cancellationFeeCap, Grievance: c.rules.grievanceOfficer })}</div>
+      <div class="card" data-fold="a-drivers" data-open data-sum="${c.drivers.total} in all · ${c.drivers.online} online"><h2>Drivers</h2>${kv({ Total: c.drivers.total, Verified: c.drivers.verified, 'Awaiting verification': c.drivers.awaitingVerification, 'Online now': c.drivers.online, 'On hold': c.drivers.suspended, 'Insurance expired': c.drivers.insuranceExpired, 'Wallet below minimum': c.drivers.walletBelowMinimum, 'Forced rests (30 days)': c.dutyLockouts30d })}
         ${c.drivers.insuranceExpiringSoon.length ? `<h3>Insurance expiring in 30 days</h3>${c.drivers.insuranceExpiringSoon.map((d) => `<div class="between small"><span>${esc(d.name)} · ${esc(d.vehicle)}</span><b>${esc(d.validTill)}</b></div>`).join('')}` : ''}</div>
-      <div class="card"><h2>Driving hours today</h2><div class="list">${c.dutyHours.map((d) => `<div class="between"><div><b>${esc(d.name)}</b> <span class="plate">${esc(d.vehicle || '')}</span><div class="muted small">${esc(d.driverId)} · ${d.online ? 'online' : 'offline'}${d.restUntil ? ` · resting till ${when(d.restUntil)}` : ''}</div></div>
+      <div class="card" data-fold="a-hours" data-sum="${plural(c.dutyHours.length, 'driver')}"><h2>Driving hours today</h2><div class="list">${c.dutyHours.map((d) => `<div class="between"><div><b>${esc(d.name)}</b> <span class="plate">${esc(d.vehicle || '')}</span><div class="muted small">${esc(d.driverId)} · ${d.online ? 'online' : 'offline'}${d.restUntil ? ` · resting till ${when(d.restUntil)}` : ''}</div></div>
         <span class="chip ${d.locked ? 'danger' : d.remainingMin < 120 ? 'warn' : ''}">${hm(d.workedMin)} / 12h</span></div>`).join('') || '<p class="muted">No drivers yet.</p>'}</div></div>
-      <div class="card"><h2>Safety & requests</h2>${kv({ 'SOS pressed': c.safety.sos || 0, 'Route deviations': c.safety.route_deviation || 0, 'Late-ride alerts': c.lateAlerts, 'Privacy requests': counts(c.privacyRequests), 'Police / RTO requests': counts(c.authorityRequests) })}</div>
-      <div class="card"><h2>Trip register for authorities</h2><p class="muted small">Every trip with driver, vehicle, DIGIPINs, fare, GST and the fit-to-drive record. Hand this over when a transport authority asks.</p>
+      <div class="card" data-fold="a-safety" data-sum="${c.safety.sos || 0} SOS · ${c.lateAlerts} late alerts"><h2>Safety & requests</h2>${kv({ 'SOS pressed': c.safety.sos || 0, 'Route deviations': c.safety.route_deviation || 0, 'Late-ride alerts': c.lateAlerts, 'Privacy requests': counts(c.privacyRequests), 'Police / RTO requests': counts(c.authorityRequests) })}</div>
+      <div class="card" data-fold="a-register" data-sum="Download for RTO or police"><h2>Trip register for authorities</h2><p class="muted small">Every trip with driver, vehicle, DIGIPINs, fare, GST and the fit-to-drive record. Hand this over when a transport authority asks.</p>
         <div class="grid2"><div><label class="f">From</label><input id="r-from" type="date"></div><div><label class="f">To</label><input id="r-to" type="date"></div></div>
         <button id="r-dl" class="btn block">${ic('download')}Download CSV</button></div>`;
     $('#r-dl').onclick = run(async () => {
