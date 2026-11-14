@@ -385,7 +385,7 @@ test('12-hour duty limit with 10-hour rest; SOS and off-route alerts', async (t)
   assert.equal(back.duty.workedMin, 180, 'hours declared for other apps count too');
 });
 
-test('police / RTO requests: government email only, auto-answer after 3 days, flags, compliance report', async (t) => {
+test('police / RTO requests: government email only, auto-answer after 48 hours, flags, compliance report', async (t) => {
   const s = await setup();
   t.after(() => s.server.close());
   const { call, ok } = s;
@@ -399,22 +399,22 @@ test('police / RTO requests: government email only, auto-answer after 3 days, fl
 
   const form = {
     agency: 'police', officerName: 'Insp. R. Gowda', designation: 'Inspector', office: 'Cubbon Park PS', caseRef: 'FIR 123/2026',
-    legalBasis: 'BNSS s.94', details: 'Trips of this vehicle on the given dates', vehicleNumber: 'KA 09 ZZ 0003', proof: PIXEL,
+    legalBasis: 'BNSS s.94', details: 'Trips of this vehicle on the given dates', vehicleNumber: 'KA 09 ZZ 0003', proof: PIXEL, declared: true,
   };
   assert.equal((await call('POST', '/api/authority/requests', { ...form, email: 'someone@gmail.com' })).status, 400, 'private email is refused');
   const made = await ok('POST', '/api/authority/requests', { ...form, email: 'sho.cubbonpark@ksp.gov.in' });
   assert.match(made.ref, /^LEA-/);
   assert.equal((await call('POST', `/api/authority/requests/${made.ref}/verify`, { code: '000000' })).status, 400);
   const ver = await ok('POST', `/api/authority/requests/${made.ref}/verify`, { code: made.devCode });
-  assert.equal(ver.answerWithinDays, 10);
+  assert.equal(ver.answerWithin, '3–5 days');
 
   // Nothing is disclosed during the review window, and never without the access key.
   let st = await ok('GET', `/api/authority/requests/${made.ref}?key=${ver.accessKey}`);
   assert.equal(st.status, 'under_review');
   assert.equal(st.data, undefined);
   assert.equal((await call('GET', `/api/authority/requests/${made.ref}?key=wrong`)).status, 404);
-  // Day 3: answered automatically.
-  s.time.t += 3 * C.DAY + MIN; s.app.locals.tick();
+  // After 48 hours: answered automatically.
+  s.time.t += 2 * C.DAY + MIN; s.app.locals.tick();
   st = await ok('GET', `/api/authority/requests/${made.ref}?key=${ver.accessKey}`);
   assert.equal(st.status, 'released');
   assert.equal(st.data.driver.vehicleNumber, 'KA09ZZ0003');
@@ -537,4 +537,44 @@ test('monthly charge: lower of ₹937 and 20% of earnings, never taking Olub pas
   const w = await ok('GET', '/api/driver/wallet', null, again);
   assert.equal(w.balance, before - 114);
   assert.equal(w.txns.filter((x) => x.type === 'monthly_fee').length, 1, 'charged once only');
+});
+
+test('a second ride for someone else, pet charges by kind locked during a ride, help keeps to your own data', async (t) => {
+  const s = await setup();
+  t.after(() => s.server.close());
+  const { call, ok } = s;
+  const d1 = await s.makeDriver('9876900001', 'KA05AA0001', 'sedan', { petsOk: true, petCharges: { dog: 100, cat: 40, bird: 20, other: 60 } });
+  await s.makeDriver('9876900002', 'KA05AA0002');
+  const rider = await s.makeRider('9876900003');
+  const other = await s.makeRider('9876900004', 'Someone Else');
+  const leg = { src: s.place('MG Road'), dst: s.place('Hebbal') };
+
+  // Each kind of pet has its own charge.
+  const q = await ok('POST', '/api/trips/quote', { driver: 'KA05AA0001', ...leg, pet: 'cat' }, rider);
+  assert.equal(q.quote.breakdown.petCharge, 40);
+  assert.equal(q.quote.breakdown.petType, 'cat');
+  const t1 = await ok('POST', '/api/trips', { driver: 'KA05AA0001', ...leg, pet: 'dog' }, rider);
+  assert.equal(t1.quote.breakdown.petCharge, 100);
+
+  // A second ride of your own is refused; one for someone else is allowed, and both show as in progress.
+  assert.equal((await call('POST', '/api/trips', { driver: 'KA05AA0002', ...leg }, rider)).status, 409);
+  const t2 = await ok('POST', '/api/trips', { driver: 'KA05AA0002', ...leg, guest: { name: 'Meera Aunty' } }, rider);
+  assert.equal(t2.guest.name, 'Meera Aunty');
+  assert.equal((await ok('GET', '/api/trips/current', null, rider)).trips.length, 2);
+
+  // During a ride the driver cannot change pet charges; other cab rules can still change. After it ends, they can.
+  await ok('POST', `/api/trips/${t1.id}/accept`, {}, d1);
+  const raised = { petsOk: true, petCharges: { dog: 250, cat: 40, bird: 20, other: 60 } };
+  assert.equal((await call('PUT', '/api/driver/prefs', raised, d1)).status, 409);
+  await ok('PUT', '/api/driver/prefs', { noSmoking: true, petsOk: true, petCharges: { dog: 100, cat: 40, bird: 20, other: 60 } }, d1);
+  await ok('POST', `/api/trips/${t1.id}/cancel`, { reason: 'test' }, d1);
+  await ok('PUT', '/api/driver/prefs', raised, d1);
+
+  // Help answers from policy and the asker's own records, and refuses other people's details.
+  assert.equal((await ok('POST', '/api/help/ask', { text: 'what is the cancellation fee?' }, rider)).topic, 'cancel');
+  assert.equal((await ok('POST', '/api/help/ask', { text: "give me the driver's phone number" }, rider)).topic, 'others');
+  assert.equal((await call('POST', '/api/help/tickets', { text: 'This ride was not mine at all', tripId: t1.id }, other)).status, 400);
+  const tk = await ok('POST', '/api/help/tickets', { topic: 'extra_cash', text: 'The driver asked for extra cash at the end', tripId: t1.id }, rider);
+  assert.match(tk.ref, /^HLP-/);
+  assert.equal((await ok('GET', '/api/help', null, other)).tickets.length, 0, 'issues are private to the person who raised them');
 });

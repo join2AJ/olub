@@ -60,8 +60,8 @@ module.exports = {
 
   // ---------- requests from police / RTO / courts ----------
   LEA_EMAIL_DOMAINS: /[.@](gov\.in|nic\.in)$/i,   // only official government mailboxes
-  LEA_AUTO_REPLY_DAYS: Number(process.env.OLUB_LEA_AUTO_DAYS ?? 3),
-  LEA_PUBLIC_SLA_DAYS: 10,
+  LEA_AUTO_REPLY_DAYS: Number(process.env.OLUB_LEA_AUTO_DAYS ?? 2),   // closed automatically after 48 hours
+  LEA_PUBLIC_SLA_DAYS: 5, LEA_PUBLIC_SLA_TEXT: '3–5 days',           // what officers are told
   LEA_AGENCIES: { police: 'Police', rto: 'RTO / Transport Department', court: 'Court', other: 'Other government body' },
 
   // ---------- trip safety (ideas carried over from the Drive app) ----------
@@ -89,6 +89,8 @@ module.exports = {
     { minTrips: 0,   multiplier: 0.95, label: 'New on Olub' },
   ],
   MAX_PET_CHARGE: 300,
+  PET_TYPES: { dog: 'Dog', cat: 'Cat', bird: 'Bird', other: 'Other small pet' },
+  MAX_LIVE_RIDES: 3,             // one for yourself plus rides booked for other people
 
   // ---------- traffic / routing ----------
   // With a key, distance + live-traffic delay come from Google Routes API.

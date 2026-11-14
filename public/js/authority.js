@@ -10,7 +10,7 @@ window.openTodo = function () {};
   function form() {
     app.innerHTML = `
       <div class="card hero"><h1>Information requests & vehicle flags</h1>
-        <p class="muted">For police, transport departments (RTO) and courts. Every request is logged. We answer within ${cfg.lea.publicDays} days.</p></div>
+        <p class="muted">For police, transport departments (RTO) and courts. Every request is logged. You must confirm a government email, attach a signed letter and declare that the request is genuine. We answer within ${cfg.lea.publicDays}.</p></div>
       <div class="card">
         <div class="seg" id="kind"><button data-k="data" class="on">Request information</button><button data-k="flag">Flag a vehicle</button></div>
         <label class="f">Agency</label><select id="agency">${Object.entries(cfg.lea.agencies).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select>
@@ -26,6 +26,7 @@ window.openTodo = function () {};
         <div class="grid2" id="dates"><div><label class="f">From</label><input id="from" type="date"></div><div><label class="f">To</label><input id="to" type="date"></div></div>
         <label class="f" id="dl">What information is needed, and why?</label><textarea id="details" maxlength="1000"></textarea>
         <label class="f">Signed request letter / authorisation (photo or PDF)</label><input id="proof" type="file" accept="image/*,application/pdf">
+        <label class="check"><input type="checkbox" id="declared"><span>I declare that this information is required for my official work and that this request is genuine. I understand it is kept on record.</span></label>
         <button id="go" class="btn block">Send verification code to my email</button>
       </div>
       <div class="card"><h2>Already applied?</h2>
@@ -45,7 +46,7 @@ window.openTodo = function () {};
       verify(await api('POST', '/api/authority/requests', {
         kind, agency: $('#agency').value, officerName: $('#officer').value, designation: $('#desig').value, office: $('#office').value,
         email: $('#email').value, caseRef: $('#case').value, legalBasis: $('#basis').value, vehicleNumber: $('#veh').value, driverId: $('#drv').value,
-        tripId: $('#trip').value, from: $('#from').value, to: $('#to').value, details: $('#details').value, proof,
+        tripId: $('#trip').value, from: $('#from').value, to: $('#to').value, details: $('#details').value, proof, declared: $('#declared').checked,
       }));
     });
     $('#check').onclick = run(() => show($('#ref').value.trim().toUpperCase(), $('#key').value.trim()));

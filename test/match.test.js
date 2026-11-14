@@ -108,8 +108,10 @@ test('nearest cab is asked first; if it declines or does not answer, the next ne
   const far = await ok('POST', '/api/trips', { ...trip, match: { vehicleType: 'sedan' } }, rider);
   assert.equal(far.driver.vehicleNumber, 'UP32AA0002');
   assert.equal(far.quote.platformFee, 15);
+  assert.equal(far.otp, undefined, 'no ride code while Olub is still searching');
   await ok('POST', `/api/trips/${far.id}/accept`, {}, mid);
-  await ok('POST', `/api/trips/${far.id}/start`, { otp: far.otp, fitDeclaration: true }, mid);
+  const code = (await ok('GET', `/api/trips/${far.id}`, null, rider)).otp;
+  await ok('POST', `/api/trips/${far.id}/start`, { otp: code, fitDeclaration: true }, mid);
   const done = await ok('POST', `/api/trips/${far.id}/complete`, {}, mid);
   assert.equal(done.final.breakdown.pickupKm, far.quote.breakdown.pickupKm);
   assert.equal(done.final.breakdown.rideFare, far.quote.breakdown.rideFare);

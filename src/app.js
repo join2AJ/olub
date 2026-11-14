@@ -258,7 +258,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
       state: d.state, status: d.status, verifiedVia: d.verified_via, online: !!d.online,
       completedTrips: d.completed_trips, experience: tier.label, rating: ratingOf(d.user_id),
       rules: Object.keys(C.DRIVER_RULES).filter((k) => prefs[k]),
-      petsOk: !!prefs.petsOk, petCharge: prefs.petsOk ? (prefs.petCharge || 0) : 0,
+      petsOk: !!prefs.petsOk, petCharge: prefs.petsOk ? (prefs.petCharge || 0) : 0, petCharges: prefs.petsOk ? petChargesOf(prefs) : null,
       licenseNo: mask(d.license_no), rcNo: d.rc_no,
       // Only what a rider needs to recognise the driver. KYC ID stays private.
       photos: { selfie: docs.selfie || u.photo || null, vehicle: docs.vehicle || null },
@@ -335,7 +335,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     const why = unavailableReason(d);
     if (why) throw httpError(409, why);
     const prefs = json(d.prefs) || {};
-    const pet = !!body.pet;
+    const pet = !!body.pet; const petType = petTypeOf(body.pet);
     if (pet && !prefs.petsOk) throw httpError(409, 'This driver does not take pets');
 
     const src = resolvePoint(body.src, 'Pickup');
@@ -351,9 +351,10 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
       condition: d.vehicle_condition, completedTrips: d.completed_trips,
       waitMinutes: route.delayMin,
       tolls: T.tollsForVehicle(routeTolls, d.vehicle_type),
-      petCharge: pet ? Math.min(C.MAX_PET_CHARGE, prefs.petCharge || 0) : 0,
+      petCharge: pet ? Math.min(C.MAX_PET_CHARGE, petChargesOf(prefs)[petType] || 0) : 0,
       calamity: !!cal, dues: rider.cancel_dues,
     });
+    if (pet) quote.breakdown.petType = petType;
     quote.driverCompletedTrips = d.completed_trips;
     quote.rates = rates;
     return { d, src, dst, state, route, routeTolls, quote, calamity: cal, pet };
@@ -461,11 +462,11 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
       offRoute: !!trip.off_route_alerted, sosAt: trip.sos_at,
       state: trip.state, distanceKm: trip.distance_km,
       etaMin: Math.round(trip.eta_min), traffic: { label: trip.traffic_label, source: trip.traffic_source },
-      pet: !!trip.pet,
+      pet: !!trip.pet, petType: trip.pet ? ((json(trip.quote) || {}).breakdown || {}).petType || 'other' : null,
       quote: withDiscount(json(trip.quote), trip.verify_discount ? C.VERIFY_DISCOUNT : 0),
       final: json(trip.final),
       tolls: tripTolls(trip).map((t) => T.publicToll(db, t, isRider ? undefined : trip.driver_id)),
-      otp: isRider && ['requested', 'accepted'].includes(trip.status) ? trip.otp : undefined, // rider only
+      otp: isRider && (trip.status === 'accepted' || (trip.status === 'requested' && !trip.match_mode)) ? trip.otp : undefined, // rider only; while Olub is still searching for a cab there is no code to share
       driver: publicDriver(d),
       rider: { publicId: rider.public_id, name: firstName(rider.name), rating: ratingOf(rider.id), photo: rider.photo },
       routePolyline: trip.route_poly,
@@ -521,7 +522,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     monthly: { enabled: C.MONTHLY_FEE_ENABLED, max: C.MONTHLY_FEE_MAX, sharePercent: C.MONTHLY_FEE_SHARE * 100 },
     defaultToll: C.DEFAULT_TOLL, stateDefaultToll: C.STATE_DEFAULT_TOLL, tollConfirmationsRequired: C.TOLL_CONFIRMATIONS_REQUIRED,
     vehicles: getRates(), conditions: Object.keys(C.CONDITION_MULTIPLIER),
-    driverRules: C.DRIVER_RULES, maxPetCharge: C.MAX_PET_CHARGE, ratingCriteria: C.RATING_CRITERIA,
+    driverRules: C.DRIVER_RULES, maxPetCharge: C.MAX_PET_CHARGE, petTypes: C.PET_TYPES, maxLiveRides: C.MAX_LIVE_RIDES, ratingCriteria: C.RATING_CRITERIA,
     overdue: { warn: C.OVERDUE_WARN_MIN, alert: C.OVERDUE_ALERT_MIN }, minAge: C.MIN_AGE,
     dsrTypes: C.DSR_TYPES, dsrPublicDays: C.DSR_PUBLIC_SLA_DAYS,
     dsrCorrectionFields: Object.fromEntries(Object.entries(C.DSR_CORRECTION_FIELDS).map(([k, v]) => [k, { label: v.label, mode: v.mode }])),
@@ -529,7 +530,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     gst: { ride: C.RIDE_GST_RATE, platformFee: C.PLATFORM_FEE_GST_RATE }, company: C.COMPANY,
     wallet: { min: C.WALLET_MIN_BALANCE, maxTopup: C.WALLET_MAX_TOPUP }, defaultCity: C.DEFAULT_CITY,
     duty: { maxHours: C.DUTY_MAX_HOURS, restHours: C.DUTY_REST_HOURS },
-    lea: { agencies: C.LEA_AGENCIES, publicDays: C.LEA_PUBLIC_SLA_DAYS },
+    lea: { agencies: C.LEA_AGENCIES, publicDays: C.LEA_PUBLIC_SLA_TEXT },
     calamity: db.prepare('SELECT * FROM calamity').all(),
   })));
 
@@ -789,13 +790,31 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
   });
 
   // ================= driver =================
+  /** The kind of pet a booking is for. Older apps send just `true`. */
+  const petTypeOf = (v) => (typeof v === 'string' && C.PET_TYPES[v] ? v : v ? 'other' : null);
+  /** A driver's charge for each kind of pet (older records have one charge for all). */
+  const petChargesOf = (prefs) => Object.fromEntries(Object.keys(C.PET_TYPES).map((k) => [k, (prefs.petCharges && prefs.petCharges[k] != null ? prefs.petCharges[k] : prefs.petCharge) || 0]));
+
+  function petLock(driverId, next, cur) {
+    const petKey = (p) => JSON.stringify([!!p.petsOk, p.petsOk ? petChargesOf(p) : null]);
+    if (petKey(next) !== petKey(cur) && db.prepare("SELECT 1 FROM trips WHERE driver_id = ? AND status IN ('accepted','started')").get(driverId)) {
+      throw httpError(409, 'You can change pet charges after this ride ends. The new charges apply from your next ride.');
+    }
+  }
+
   function cleanPrefs(p = {}) {
     const out = {};
     for (const k of Object.keys(C.DRIVER_RULES)) out[k] = !!p[k];
     out.petsOk = !!p.petsOk;
     const charge = Math.round(Number(p.petCharge) || 0);
     if (charge < 0 || charge > C.MAX_PET_CHARGE) throw httpError(400, `Pet charge must be between ₹0 and ₹${C.MAX_PET_CHARGE}`);
-    out.petCharge = out.petsOk ? charge : 0;
+    out.petCharges = {};
+    for (const k of Object.keys(C.PET_TYPES)) {
+      const v = Math.round(Number(p.petCharges && p.petCharges[k] != null ? p.petCharges[k] : charge) || 0);
+      if (v < 0 || v > C.MAX_PET_CHARGE) throw httpError(400, `Pet charge must be between ₹0 and ₹${C.MAX_PET_CHARGE}`);
+      out.petCharges[k] = out.petsOk ? v : 0;
+    }
+    out.petCharge = out.petsOk ? Math.max(...Object.values(out.petCharges)) : 0; // highest, for older screens
     return out;
   }
 
@@ -841,6 +860,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     if (missing.length) status = 'incomplete';
     else if (status !== 'verified' || changed) status = 'submitted';
     const prefs = b.prefs ? cleanPrefs(b.prefs) : (json(d.prefs) || cleanPrefs());
+    if (b.prefs) petLock(req.user.id, prefs, json(d.prefs) || {});
 
     db.prepare(`UPDATE drivers SET vehicle_number = ?, vehicle_type = ?, vehicle_model = ?, vehicle_condition = ?, state = ?,
       license_no = ?, license_issued_on = ?, rc_no = ?, kyc_id_no = ?, insurance_valid_till = ?, permit_no = ?, docs = ?, prefs = ?, status = ?,
@@ -855,7 +875,10 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
 
   // Cab rules & pets can be changed any time without re-verification.
   app.put('/api/driver/prefs', auth, role('driver'), route((req) => {
-    db.prepare('UPDATE drivers SET prefs = ? WHERE user_id = ?').run(JSON.stringify(cleanPrefs(req.body)), req.user.id);
+    const next = cleanPrefs(req.body); const cur = json(getDriver(req.user.id).prefs) || {};
+    // Pet settings are locked while a ride is on; the new ones apply from the next ride.
+    petLock(req.user.id, next, cur);
+    db.prepare('UPDATE drivers SET prefs = ? WHERE user_id = ?').run(JSON.stringify(next), req.user.id);
     return meView(req.user);
   }));
 
@@ -1001,8 +1024,14 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
 
   app.post('/api/trips', auth, role('rider'), route(async (req, res) => {
     requireReady(req.user);
-    if (db.prepare(`SELECT 1 FROM trips WHERE rider_id = ? AND (status IN ('requested','accepted','started')
-      OR (status = 'completed' AND paid_at IS NULL))`).get(req.user.id)) throw httpError(409, 'You already have an active trip');
+    const live = db.prepare(`SELECT guest_id, status FROM trips WHERE rider_id = ? AND (status IN ('requested','accepted','started')
+      OR (status = 'completed' AND paid_at IS NULL))`).all(req.user.id);
+    if (live.length) {
+      if (!req.body.guest) {
+        if (live.some((t) => !t.guest_id)) throw httpError(409, 'You already have a ride of your own in progress. You can still book a ride for someone else.');
+      }
+      if (live.length >= C.MAX_LIVE_RIDES) throw httpError(409, `You can have up to ${C.MAX_LIVE_RIDES} rides in progress at a time`);
+    }
     // Either the customer names the cab (QR / number), or Olub finds the nearest one of the chosen type.
     let extra = {}; let matched = null;
     if (req.body.match) {
@@ -1038,7 +1067,10 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     const requests = req.user.role === 'driver'
       ? db.prepare("SELECT * FROM trips WHERE driver_id = ? AND status = 'requested' ORDER BY id").all(req.user.id).map((t) => tripView(t, req.user))
       : [];
-    return { trip: trip ? tripView(trip, req.user) : null, requests };
+    // Every ride this customer has in progress (their own and any booked for other people).
+    const trips = req.user.role === 'rider' ? db.prepare(`SELECT * FROM trips WHERE rider_id = ?
+      AND (status IN ('requested','accepted','started') OR (status = 'completed' AND paid_at IS NULL)) ORDER BY id`).all(req.user.id).map((t) => tripView(t, req.user)) : [];
+    return { trip: trip ? tripView(trip, req.user) : null, requests, trips };
   }));
 
   app.get('/api/trips', auth, route((req) => db.prepare('SELECT * FROM trips WHERE rider_id = ? OR driver_id = ? ORDER BY id DESC LIMIT 50')

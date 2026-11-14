@@ -20,7 +20,7 @@ This is a working checklist, not legal advice. The main rule set is the **Motor 
 | Emergency button | SOS alerts the trusted contact and offers a call to 112 | Trip screen |
 | Grievance officer shown | Contact shown in Profile and at `/legal` (placeholder until appointed) | Profile |
 | Records kept and shareable with the authority | Trip register with driver, vehicle, DIGIPINs, fare, GST, fit declaration; download as CSV | Admin → Compliance |
-| Data requests from police / RTO / courts | Form at `/authority`: government email, emailed code, signed letter; answered within 10 days; full log | Admin → Police / RTO |
+| Data requests from police / RTO / courts | Form at `/authority`: government email, emailed code, signed letter; officer declares the request is genuine; closed automatically after 48 hours (officers are told 3–5 days); full log | Admin → Police / RTO |
 | Authority can flag a vehicle | Verified officer flags a vehicle; admin is alerted and can put the driver on hold | Admin → Police / RTO |
 
 ## What is still open
@@ -52,8 +52,8 @@ This is a working checklist, not legal advice. The main rule set is the **Motor 
 1. The officer fills the form at `/authority` and attaches a signed letter.
 2. Only email addresses ending in `.gov.in` or `.nic.in` are accepted. A code sent to that address must be entered.
 3. A **vehicle flag** takes effect at once: admins see it and can put the driver on hold.
-4. A **data request** waits 3 days for review. An admin can open the letter, release early, or refuse with a reason.
-5. If nobody refuses it, the system releases the matching records on day 3. The public promise is 10 days.
+4. A **data request** waits 48 hours for review. An admin can open the letter, release early, or refuse with a reason.
+5. If nobody refuses it, the system releases the matching records after 48 hours. The public promise is 3–5 days.
 6. The officer opens the records with the reference and a one-time access key.
 7. Every step — submitted, wrong code, verified, released, viewed, refused — is in the audit log.
 

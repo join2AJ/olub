@@ -11,6 +11,7 @@ function logout() {
 function connect() {
   if (S.es) S.es.close();
   S.es = new EventSource(`${S.base}/api/events?token=${encodeURIComponent(S.token)}`);
+  S.es.addEventListener('help', () => { toast('Olub replied to your issue', false, 'chat'); if (S.tab === 'help') render(); });
   S.es.addEventListener('trip', run(async () => { await refreshTrip(); render(); }));
   S.es.addEventListener('message', (e) => {
     const m = JSON.parse(e.data);
@@ -63,7 +64,9 @@ async function refreshTrip() {
   const prevId = S.trip && S.trip.id;
   const cur = await api('GET', '/api/trips/current');
   const known = new Set((S.requests || []).map((t) => t.id));
-  S.trip = cur.trip; S.requests = cur.requests;
+  S.requests = cur.requests; S.liveTrips = cur.trips || [];
+  if (S.me && S.me.role === 'rider') S.trip = (prevId && S.liveTrips.find((t) => t.id === prevId)) || (prevId ? null : cur.trip); // stay on the ride being looked at
+  else S.trip = cur.trip;
   if (S.me && S.me.role === 'driver' && S.requestsLoaded && cur.requests.some((t) => !known.has(t.id))) { chime(); S.tab = 'home'; toast('New ride request', false, 'car'); }
   S.requestsLoaded = true;
   if (prevId && !S.trip) {
@@ -72,7 +75,9 @@ async function refreshTrip() {
     if (old && old.status === 'cancelled') toast(cancelText(old), true);
     if (old && old.status === 'completed' && old.paidAt) S.trip = old; // keep the receipt until dismissed
   }
-  if (S.trip && S.trip.id !== prevId) S.messages = await api('GET', `/api/trips/${S.trip.id}/messages`);
+  if (!S.trip && S.liveTrips.length) S.trip = S.liveTrips[0];
+  if (!S.liveTrips.length) S.bookNew = false;
+  if (S.trip && S.trip.id !== S.msgTrip) { S.messages = await api('GET', `/api/trips/${S.trip.id}/messages`).catch(() => []); S.msgTrip = S.trip.id; }
   if (S.me && S.me.role === 'driver') S.me = await api('GET', '/api/me');
   syncTracking(); syncPresence();
 }
@@ -138,8 +143,8 @@ function onSafety(ev) {
 
 // ---------------- shell ----------------
 const TABS = {
-  rider: [['home', 'Ride', 'car'], ['activity', 'Activity', 'list'], ['safety', 'Safety', 'shield'], ['feedback', 'Ratings', 'star'], ['profile', 'Profile', 'user']],
-  driver: [['home', 'Drive', 'car'], ['money', 'Earnings', 'wallet'], ['trips', 'Trips', 'list'], ['feedback', 'Ratings', 'star'], ['profile', 'Profile', 'user']],
+  rider: [['home', 'Ride', 'car'], ['activity', 'Activity', 'list'], ['safety', 'Safety', 'shield'], ['help', 'Help', 'chat'], ['profile', 'Profile', 'user']],
+  driver: [['home', 'Drive', 'car'], ['money', 'Earnings', 'wallet'], ['trips', 'Trips', 'list'], ['help', 'Help', 'chat'], ['profile', 'Profile', 'user']],
   admin: [['home', 'Admin', 'shield'], ['profile', 'Profile', 'user']],
 };
 
@@ -165,10 +170,10 @@ function renderView(app) {
   const tabs = TABS[S.me.role];
   if (!tabs.some((t) => t[0] === S.tab)) S.tab = 'home';
   $('#nav').innerHTML = tabs.map(([k, l, i]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><span class="pill">${ic(i)}</span>${l}
-    ${k === 'home' && (S.requests.length || (S.trip && S.tab !== 'home')) ? '<span class="dot"></span>' : ''}</button>`).join('');
-  $$('#nav button').forEach((b) => { b.onclick = () => { if (S.tab === b.dataset.tab) { S.scrollPos[viewKey()] = 0; window.scrollTo(0, 0); } S.tab = b.dataset.tab; render(); }; });
+    ${k === 'home' && (S.requests.length || ((S.trip || (S.liveTrips || []).length) && S.tab !== 'home')) ? '<span class="dot"></span>' : ''}</button>`).join('');
+  $$('#nav button').forEach((b) => { b.onclick = () => { if (S.tab === b.dataset.tab) { S.scrollPos[viewKey()] = 0; window.scrollTo(0, 0); } if (S.sub === 'ratings') S.sub = null; S.tab = b.dataset.tab; render(); }; });
   if (S.tab === 'profile') return renderProfile(app);
-  if (S.tab === 'feedback') return renderFeedback(app);
+  if (S.tab === 'help') return renderHelp(app);
   if (['activity', 'money', 'trips'].includes(S.tab)) return renderInsights(app);
   if (S.tab === 'safety') return renderSafety(app);
   if (S.me.role === 'rider') return renderRider(app);
@@ -216,6 +221,8 @@ function renderAuth(app) {
     ${S.cfg.demoLogin ? `<div class="card demo"><div class="between"><h2 style="margin:0">${ic('sparkle')} Try the demo</h2><span class="chip gold">Test mode</span></div>
       <p class="muted small" style="margin:6px 0 12px">One tap, no code. Loads sample drivers, passengers and trips around Lucknow.</p>
       <div class="demo3"><button data-demo="rider">${ic('user')}<b>Passenger</b><span>Book a ride</span></button><button data-demo="driver">${ic('car')}<b>Driver</b><span>Accept a ride</span></button><button data-demo="admin">${ic('shield')}<b>Admin</b><span>Run Olub</span></button></div></div>` : ''}`;
+  app.insertAdjacentHTML('beforeend', `<p class="center small" style="margin-top:14px"><a href="#" id="auth-official" class="muted">${ic('shield')} Government official? Request records here</a></p>`);
+  $('#auth-official').onclick = (e) => { e.preventDefault(); officialSheet(); };
   $$('[data-demo]').forEach((b) => { b.onclick = run(async () => {
     const r = await api('POST', '/api/auth/demo', { role: b.dataset.demo });
     S.token = r.token; store('olub.token', r.token); S.me = r.user; S.tab = 'home'; S.booking = { mode: 'plate', driver: '', src: null, dst: null, pet: false }; S.estimate = null; S.nearby = null; S.quote = null;
@@ -405,6 +412,11 @@ function scanSheet(onCode) {
 }
 
 // ---------------- driver card, fare, trip pieces ----------------
+function petChargeText(d) {
+  const c = d.petCharges ? Object.values(d.petCharges) : [d.petCharge || 0]; const lo = Math.min(...c), hi = Math.max(...c);
+  return !hi ? ' · free' : lo === hi ? ` +${rs(hi)}` : ` +${rs(lo)} to ${rs(hi)}`;
+}
+
 function driverCard(d) {
   const img = d.photos && d.photos.selfie ? `<img class="avatar" src="${d.photos.selfie}" alt="">` : `<div class="avatar">${esc((d.name || 'D')[0])}</div>`;
   const badge = d.status === 'verified' ? `<span class="chip">${ic('shield')}Verified</span>` : `<span class="chip warn">${ic('clock')}New — not yet verified</span>`;
@@ -415,17 +427,15 @@ function driverCard(d) {
       <div class="muted small">${esc(person)}</div></div></div>
     <div class="chips" style="margin-top:10px">${badge}<span class="chip grey">${ic('id')}${esc(d.publicId)}</span><span class="chip grey">${esc(d.experience)} · ${d.completedTrips} trips</span>
       ${d.rules.map((r) => `<span class="chip warn">${ic('ban')}${esc(S.cfg.driverRules[r])}</span>`).join('')}
-      ${d.petsOk ? `<span class="chip">${ic('paw')}Pets OK${d.petCharge ? ` +${rs(d.petCharge)}` : ''}</span>` : `<span class="chip grey">${ic('paw')}No pets</span>`}</div>`;
+      ${d.petsOk ? `<span class="chip">${ic('paw')}Pets OK${petChargeText(d)}</span>` : `<span class="chip grey">${ic('paw')}No pets</span>`}</div>`;
 }
 
 function fareTable(f, { final = false, forDriver = false } = {}) {
   const b = f.breakdown;
   return `<table class="fare">
     <tr><td>Ride · ${f.distanceKm} km</td><td>${rs(b.rideFare)}</td></tr>
-    ${b.pickupKm ? `<tr class="sub"><td colspan="2">${b.pickupKm} km for the cab to reach ${forDriver ? 'the customer' : 'you'} + ${b.tripKm} km trip</td></tr>` : ''}
-    <tr class="sub"><td colspan="2">${rs(b.base)} base + ${rs(b.perKm)}/km · vehicle ×${b.conditionMultiplier} · ${esc(b.experienceLabel)} ×${b.experienceMultiplier}${b.minFareApplied ? ' · minimum fare' : ''}</td></tr>
     ${b.waitCharge || !final ? `<tr><td>Traffic / waiting · ${b.waitMinutes} min${final ? '' : ' (estimate)'}</td><td>${rs(b.waitCharge)}</td></tr>` : ''}
-    ${b.petCharge ? `<tr><td>Pet charge</td><td>${rs(b.petCharge)}</td></tr>` : ''}
+    ${b.petCharge ? `<tr><td>Pet charge${b.petType && S.cfg.petTypes[b.petType] ? ` · ${esc(S.cfg.petTypes[b.petType].toLowerCase())}` : ''}</td><td>${rs(b.petCharge)}</td></tr>` : ''}
     ${b.tolls.map((t) => `<tr><td>Toll · ${esc(t.name)}${t.status === 'verified' ? '' : ' <span class="muted small">(state default)</span>'}</td><td>${rs(t.amount)}</td></tr>`).join('')}
     <tr class="to-driver"><td>${forDriver ? 'You keep' : 'Driver keeps'}</td><td>${rs(f.driverFare)}</td></tr>
     ${f.taxes.rideGst ? `<tr><td>GST ${f.taxes.rideGstRate * 100}% on ride</td><td>${rs(f.taxes.rideGst)}</td></tr>` : ''}
@@ -434,7 +444,17 @@ function fareTable(f, { final = false, forDriver = false } = {}) {
     ${f.discount ? `<tr><td>Driver verification reward</td><td>−${rs(f.discount)}</td></tr>` : ''}
     <tr class="total"><td>${forDriver ? 'Customer pays' : (final ? 'Total' : 'You pay')}</td><td>${rs(f.riderPays)}</td></tr>
     ${forDriver ? `<tr class="sub"><td colspan="2">${rs(f.walletDeduction)} (fee + GST) is taken from your wallet when the trip ends.</td></tr>` : ''}
-  </table>`;
+  </table>
+  <details class="know"><summary>${ic('file')}Know more — how this fare was calculated</summary><ul>
+    <li><b>Distance:</b> ${b.pickupKm ? `${b.pickupKm} km for the cab to reach ${forDriver ? 'the customer' : 'you'} + ${b.tripKm} km trip = ${f.distanceKm} km` : `${f.distanceKm} km trip`}.</li>
+    <li><b>Ride fare:</b> ${rs(b.base)} base + ${rs(b.perKm)} per km, × ${b.conditionMultiplier} for the vehicle's condition, × ${b.experienceMultiplier} for the driver's experience (${esc(b.experienceLabel)})${b.minFareApplied ? '; the minimum fare applied' : ''} = ${rs(b.rideFare)}.</li>
+    <li><b>Traffic / waiting:</b> ${b.waitMinutes} min${final ? '' : ' expected'} = ${rs(b.waitCharge)}.</li>
+    ${b.petCharge ? `<li><b>Pet charge:</b> ${rs(b.petCharge)}, set by this driver${b.petType && S.cfg.petTypes[b.petType] ? ` for a ${esc(S.cfg.petTypes[b.petType].toLowerCase())}` : ''}. It was fixed when the ride was booked.</li>` : ''}
+    ${b.tolls.length ? `<li><b>Tolls:</b> ${b.tolls.map((t) => `${esc(t.name)} ${rs(t.amount)}`).join(', ')}.</li>` : ''}
+    <li><b>GST:</b> ${f.taxes.rideGstRate * 100}% on the ride = ${rs(f.taxes.rideGst)}.</li>
+    <li><b>Olub fee:</b> ${rs(S.cfg.platformFee)} up to ${S.cfg.platformFeeLongKm} km, ${rs(S.cfg.platformFeeLong)} beyond${f.calamity ? ' (half in declared rain or calamity)' : ''} — here ${rs(f.platformFee)}, GST included.</li>
+    ${f.dues ? `<li><b>Earlier cancellation fee:</b> ${rs(f.dues)} carried over.</li>` : ''}${f.discount ? `<li><b>Reward:</b> ${rs(f.discount)} off for verifying a new driver.</li>` : ''}
+  </ul></details>`;
 }
 
 const STEP_ICONS = [['requested', 'clock'], ['accepted', 'check'], ['started', 'nav'], ['completed', 'pin']];
@@ -766,7 +786,7 @@ function renderSafety(app) {
     <div class="card hero"><h1 style="margin:0">Your safety</h1><p class="muted" style="margin:6px 0 0">Every Olub ride is tracked, and someone you trust can follow it.</p></div>
     <div class="card"><div class="between"><h2 style="margin:0">Trusted contact</h2><button class="btn small ghost" id="s-edit">${t ? 'Change' : 'Add'}</button></div>
       ${t ? `<p style="margin:8px 0 0"><b>${esc(t.name)}</b>${t.relation ? ` · ${esc(t.relation)}` : ''}<br><span class="muted">${esc(t.phone)}</span></p>` : '<p class="muted" style="margin:8px 0 0">Required before your first ride.</p>'}</div>
-    <div class="card" data-fold="sf-every" data-open data-sum="What Olub does to keep you safe"><h2>On every ride</h2>
+    <div class="card" data-fold="sf-every2" data-sum="What Olub does to keep you safe"><h2>On every ride</h2>
       ${feat('share', 'Live tracking link', `${t ? esc(t.name) : 'Your contact'} can watch the cab on a map, with its DIGIPIN, without installing anything.`)}
       ${feat('clock', 'Late-ride alert', `If you are ${S.cfg.overdue.warn} minutes late your contact is told; at ${S.cfg.overdue.alert} minutes they are asked to check on you.`)}
       ${feat('nav', 'Off-route alarm', 'If the cab leaves the expected road, you and your contact are alerted.')}
@@ -796,27 +816,52 @@ function topupSheet() {
 function renderProfile(app) {
   const me = S.me;
   if (me.role === 'driver' && S.sub === 'vehicle') return renderVehicle(app);
+  if (S.sub === 'ratings') {
+    return renderFeedback(app).then(() => {
+      if (S.tab !== 'profile' || S.sub !== 'ratings') return;
+      app.insertAdjacentHTML('afterbegin', `<button class="btn small ghost" id="back" style="margin-bottom:10px">${ic('left')}Profile</button>`);
+      $('#back').onclick = () => { S.sub = null; render(); };
+    });
+  }
+  const initials = (me.name || 'O').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  const tile = (attr, icon, title, sub) => `<button ${attr}><span class="ti">${ic(icon)}</span><b>${title}</b><span>${sub}</span></button>`;
+  const row = (attr, icon, title, sub) => `<button ${attr}><span class="mi">${ic(icon)}</span><span class="grow">${title}${sub ? `<div class="muted small">${sub}</div>` : ''}</span>${ic('right')}</button>`;
+  const third = me.role === 'driver' ? [rs(me.driver.wallet.balance), 'Wallet'] : me.role === 'rider' ? [(S.liveTrips || []).length, 'Rides now'] : [me.emailVerified ? 'Yes' : 'No', 'Email confirmed'];
   app.innerHTML = `
-    <div class="idcard">${me.photo ? `<img src="${me.photo}" alt="" class="avatar" style="float:right;position:relative;z-index:1;width:72px;height:72px;border:2px solid #ffffff55">` : ''}<div class="muted small" style="color:#ffffffaa">${{ rider: 'OLUB CUSTOMER', driver: 'OLUB DRIVER', admin: 'OLUB ADMIN' }[me.role]}</div>
-      <div class="pid">${esc(me.publicId)}</div><div style="font-size:20px;font-weight:800;margin-top:10px">${esc(me.name)}</div>
-      <div class="muted small" style="color:#ffffffcc">${[me.age && `${me.age} yrs`, cap(me.gender), me.rating.count && `${ic('star', 'fill')} ${me.rating.average.toFixed(1)}`].filter(Boolean).join(' · ')}</div>
-      <div class="chips" style="margin-top:12px;position:relative;z-index:1"><span class="chip">${ic('check')}Mobile confirmed</span>
+    <div class="pf-hero">
+      <div class="pf-top">${me.photo ? `<img src="${me.photo}" alt="" class="pf-av">` : `<div class="pf-av">${esc(initials)}</div>`}
+        <div class="grow" style="min-width:0"><div class="pf-role">${{ rider: 'Olub customer', driver: 'Olub driver', admin: 'Olub admin' }[me.role]}</div>
+          <div class="pf-name">${esc(me.name)}</div>
+          <div class="muted small" style="color:#ffffffcc">${esc([me.age && `${me.age} yrs`, cap(me.gender)].filter(Boolean).join(' · '))}</div></div></div>
+      <div class="pid">${esc(me.publicId)}</div>
+      <div class="pf-stats"><div><b>${me.rating.count ? `${me.rating.average.toFixed(1)}` : 'New'}</b><span>Rating</span></div><div><b>${me.rating.count}</b><span>${me.rating.count === 1 ? 'Review' : 'Reviews'}</span></div><div><b>${third[0]}</b><span>${third[1]}</span></div></div>
+      <div class="chips" style="position:relative;z-index:1"><span class="chip">${ic('check')}Mobile confirmed</span>
         <span class="chip ${me.emailVerified ? '' : 'warn'}">${ic(me.emailVerified ? 'check' : 'clock')}Email ${me.emailVerified ? 'confirmed' : 'not confirmed'}</span></div></div>
     ${todoCard()}
-    <div class="card menu">
-      <button data-open="personal">${ic('id')}<span class="grow">Personal details<div class="muted small">${esc([niceDate(me.dob), cap(me.gender)].filter(Boolean).join(' · ') || 'Photo, date of birth, sex')}</div></span>${ic('right')}</button>
-      <button data-open="email">${ic('mail')}<span class="grow">Email<div class="muted small">${esc(me.email || 'Not added')}</div></span>${ic('right')}</button>
-      ${me.role === 'rider' ? `<button data-open="trusted">${ic('heart')}<span class="grow">Trusted contact<div class="muted small">${me.trusted ? `${esc(me.trusted.name)} · ${esc(me.trusted.phone)}` : 'Required for rides'}</div></span>${ic('right')}</button>
-        <button id="m-guests">${ic('users')}<span class="grow">People I book for</span>${ic('right')}</button>` : ''}
-      ${me.role === 'driver' ? `<button id="m-vehicle">${ic('car')}<span class="grow">Vehicle, documents & cab rules<div class="muted small">${esc(me.driver.vehicleNumber || 'Not added')} · ${esc(me.driver.status)}</div></span>${ic('right')}</button>
-        <button id="m-qr">${ic('target')}<span class="grow">My Olub QR</span>${ic('right')}</button>` : ''}
+    <div class="tiles">
+      ${tile('data-open="personal"', 'id', 'Personal details', esc([niceDate(me.dob), cap(me.gender)].filter(Boolean).join(' · ') || 'Photo, date of birth, sex'))}
+      ${me.role === 'rider' ? tile('data-open="trusted"', 'heart', 'Trusted contact', me.trusted ? esc(me.trusted.name) : 'Required for rides') : ''}
+      ${me.role === 'driver' ? tile('id="m-vehicle"', 'car', 'Vehicle & documents', `${esc(me.driver.vehicleNumber || 'Not added')} · ${esc(me.driver.status)}`) : ''}
+      ${me.role !== 'admin' ? tile('id="m-ratings"', 'star', 'My ratings', me.rating.count ? `${me.rating.average.toFixed(1)} from ${plural(me.rating.count, 'review')}` : 'No ratings yet') : ''}
+      ${me.role !== 'admin' ? tile('id="m-help"', 'chat', 'Help', 'Ask Olub Cha or raise an issue') : ''}
+      ${me.role === 'admin' ? tile('data-open="email"', 'mail', 'Email', esc(me.email || 'Not added')) : ''}
     </div>
+    ${me.role !== 'admin' ? `<h3 class="grp">Account</h3><div class="card menu">
+      ${row('data-open="email"', 'mail', 'Email', esc(me.email || 'Not added'))}
+      ${me.role === 'rider' ? row('id="m-guests"', 'users', 'People I book for', 'Guests get their own Olub ID') : ''}
+      ${me.role === 'driver' ? row('id="m-qr"', 'target', 'My Olub QR', 'Customers scan this to book you') : ''}
+    </div>` : ''}
+    <h3 class="grp">Privacy & legal</h3>
     <div class="card menu">
-      <button id="m-privacy">${ic('lock')}<span class="grow">Privacy & my data</span>${ic('right')}</button>
-      <button id="m-legal">${ic('file')}<span class="grow">Terms, liability & privacy notice</span>${ic('right')}</button>
-      <button id="m-logout">${ic('logout')}<span class="grow">Log out</span></button>
+      ${row('id="m-privacy"', 'lock', 'Privacy & my data', 'Download, correct or delete your data')}
+      ${row('id="m-official"', 'shield', 'Government officials', 'How police, RTO and courts request records')}
+      ${row('id="m-legal"', 'file', 'Terms, liability & privacy notice', '')}
     </div>
+    <button id="m-logout" class="btn ghost block logout">${ic('logout')}Log out</button>
     <p class="center muted small">${esc(S.cfg.company.grievanceOfficer)}<br>Olub connects customers and drivers. It does not provide the ride.</p>`;
+  if ($('#m-ratings')) $('#m-ratings').onclick = () => { S.sub = 'ratings'; render(); window.scrollTo(0, 0); };
+  if ($('#m-help')) $('#m-help').onclick = () => { S.tab = 'help'; render(); window.scrollTo(0, 0); };
+  $('#m-official').onclick = officialSheet;
   bindTodos(app);
   $$('[data-open]').forEach((b) => { b.onclick = () => openTodo(b.dataset.open); });
   $('#m-legal').onclick = () => legalSheet(S.legal.required[me.role]);

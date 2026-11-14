@@ -204,6 +204,13 @@ CREATE TABLE IF NOT EXISTS outbox (
   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, channel TEXT NOT NULL, to_addr TEXT NOT NULL,
   template TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', trip_id INTEGER, user_id INTEGER
 );
+-- Issues people raise from Help. An Olub officer replies in the app.
+CREATE TABLE IF NOT EXISTS help_tickets (
+  id INTEGER PRIMARY KEY, public_id TEXT UNIQUE NOT NULL,   -- HLP-xxxxxx
+  user_id INTEGER NOT NULL, topic TEXT, text TEXT NOT NULL, trip_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'open',          -- open | answered
+  created_at INTEGER NOT NULL, reply TEXT, replied_at INTEGER, handled_by TEXT
+);
 `;
 
 // Demo places so the app works without a maps key (riders can also drop a pin).

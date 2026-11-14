@@ -240,6 +240,7 @@ module.exports = function registerExtras(x) {
     if (!vehicle && !driverId && !tripId) throw httpError(400, 'Give a vehicle number, driver ID or trip ID');
     if (kind === 'flag' && !vehicle) throw httpError(400, 'Give the vehicle number to flag');
     if (!text(b.details, 1000)) throw httpError(400, kind === 'flag' ? 'Say why this vehicle is being flagged' : 'Say what information is needed and why');
+    if (!b.declared) throw httpError(400, 'Please declare that this information is required for official work and the request is genuine');
     const toTs = Date.parse(b.to) || now();
     const fromTs = Math.max(Date.parse(b.from) || toTs - 30 * C.DAY, toTs - 90 * C.DAY);
     const code = String(crypto.randomInt(100000, 1000000));
@@ -249,7 +250,7 @@ module.exports = function registerExtras(x) {
         text(b.legalBasis, 200), text(b.details, 1000), vehicle, driverId, tripId, fromTs, toTs, encrypt(b.proof), now());
     const row = db.prepare('SELECT * FROM lea_requests WHERE id = ?').get(r.lastInsertRowid);
     queue('email', email, 'lea_email_code', `Olub: your verification code for request ${row.public_id} is ******.`);
-    audit.log({ action: 'lea.submitted', entity: 'lea', entityId: row.public_id, req, details: { kind, agency: b.agency, email, caseRef, vehicle, driverId, tripId } });
+    audit.log({ action: 'lea.submitted', entity: 'lea', entityId: row.public_id, req, details: { kind, agency: b.agency, email, caseRef, vehicle, driverId, tripId, declaredGenuine: true } });
     return { ref: row.public_id, ...(C.DEV_OTP && { devCode: code }) };
   }));
 
@@ -269,8 +270,8 @@ module.exports = function registerExtras(x) {
       db.prepare("UPDATE lea_requests SET status = 'released', resolved_at = ?, handled_by = 'auto', response = 'Vehicle flagged. Olub administrators have been alerted.' WHERE id = ?").run(now(), r.id);
     }
     audit.log({ action: r.kind === 'flag' ? 'lea.vehicle_flagged' : 'lea.email_verified', entity: 'lea', entityId: r.public_id, req, details: { vehicle: r.vehicle_number } });
-    queue('email', r.email, 'lea_received', `Olub received request ${r.public_id} (${r.case_ref}). ${r.kind === 'flag' ? 'The vehicle has been flagged.' : `You will get the information within ${C.LEA_PUBLIC_SLA_DAYS} days.`} Keep your access key safe.`);
-    return { ref: r.public_id, accessKey: key, status: r.kind === 'flag' ? 'released' : 'under_review', answerWithinDays: C.LEA_PUBLIC_SLA_DAYS };
+    queue('email', r.email, 'lea_received', `Olub received request ${r.public_id} (${r.case_ref}). ${r.kind === 'flag' ? 'The vehicle has been flagged.' : `You will get the information within ${C.LEA_PUBLIC_SLA_TEXT}.`} Keep your access key safe.`);
+    return { ref: r.public_id, accessKey: key, status: r.kind === 'flag' ? 'released' : 'under_review', answerWithinDays: C.LEA_PUBLIC_SLA_DAYS, answerWithin: C.LEA_PUBLIC_SLA_TEXT };
   }));
 
   // Step 3: the officer checks status and, once released, reads the information.
@@ -424,6 +425,55 @@ module.exports = function registerExtras(x) {
         fitDeclared: !!t.fit_declared_at, safetyScore: json(t.safety)?.score ?? null, state: t.state,
       };
     });
+  }));
+
+  // ================= Help: Olub Cha and issues =================
+  const help = require('./help');
+  /** Only the asker's own records — never anyone else's. */
+  function helpContext(user) {
+    const me = x.meView(user);
+    const t = db.prepare(`SELECT * FROM trips WHERE ${user.role === 'driver' ? 'driver_id' : 'rider_id'} = ? ORDER BY id DESC LIMIT 1`).get(user.id);
+    let lastTrip = null;
+    if (t) {
+      const f = json(t.final) || json(t.quote) || {};
+      lastTrip = { id: t.id, line: `#${t.id} to ${t.dst_name} on ${new Date(t.created_at + 5.5 * 3600e3).toISOString().slice(0, 10)} — ${t.status}${f.riderPays != null ? `, ${user.role === 'driver' ? `you keep ₹${f.driverFare}` : `total ₹${f.riderPays}`}` : ''}` };
+    }
+    return { role: user.role, cancelDues: me.cancelDues || 0, rating: me.rating, lastTrip, wallet: me.driver && me.driver.wallet, duty: me.driver && me.driver.duty, driverStatus: me.driver && me.driver.status };
+  }
+  const ticketView = (t) => ({ ref: t.public_id, topic: t.topic, text: t.text, tripId: t.trip_id, status: t.status, createdAt: t.created_at, reply: t.reply, repliedAt: t.replied_at });
+  app.get('/api/help', auth, route((req) => ({
+    topics: help.list(C, req.user.role),
+    tickets: db.prepare('SELECT * FROM help_tickets WHERE user_id = ? ORDER BY id DESC LIMIT 20').all(req.user.id).map(ticketView),
+  })));
+  app.post('/api/help/ask', auth, rateLimit, route((req) => {
+    const me = helpContext(req.user);
+    const a = (req.body.topic && help.byId(C, String(req.body.topic), me)) || help.answer(C, req.body.text, me);
+    audit.log({ action: 'help.asked', entity: 'users', entityId: req.user.id, req, details: { topic: a.topic } });
+    return a;
+  }));
+  app.post('/api/help/tickets', auth, rateLimit, route((req) => {
+    const body = text(req.body.text, 1000);
+    if (!body || body.length < 10) throw httpError(400, 'Please describe what happened in a sentence or two');
+    if (db.prepare("SELECT COUNT(*) AS n FROM help_tickets WHERE user_id = ? AND status = 'open'").get(req.user.id).n >= 5) throw httpError(409, 'You already have 5 open issues. Please wait for a reply.');
+    const tripId = Number(req.body.tripId) || null;
+    if (tripId && !db.prepare('SELECT 1 FROM trips WHERE id = ? AND (rider_id = ? OR driver_id = ?)').get(tripId, req.user.id, req.user.id)) throw httpError(400, 'That ride is not yours');
+    const r = db.prepare('INSERT INTO help_tickets (public_id, user_id, topic, text, trip_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(x.newPublicId('HLP', 'help_tickets'), req.user.id, text(req.body.topic, 40), body, tripId, now());
+    const t = db.prepare('SELECT * FROM help_tickets WHERE id = ?').get(r.lastInsertRowid);
+    audit.log({ action: 'help.ticket_raised', entity: 'help', entityId: t.public_id, req, details: { topic: t.topic, tripId } });
+    return ticketView(t);
+  }));
+  admin.get('/help', route(() => db.prepare(`SELECT h.*, u.name, u.public_id AS userId, u.role FROM help_tickets h JOIN users u ON u.id = h.user_id
+    ORDER BY h.status = 'open' DESC, h.id DESC LIMIT 200`).all().map((t) => ({ ...ticketView(t), name: t.name, userId: t.userId, role: t.role, handledBy: t.handled_by }))));
+  admin.post('/help/:ref/reply', route((req) => {
+    const t = db.prepare('SELECT * FROM help_tickets WHERE public_id = ?').get(req.params.ref);
+    if (!t) throw httpError(404, 'Issue not found');
+    const reply = text(req.body.reply, 1000);
+    if (!reply) throw httpError(400, 'Write a reply');
+    db.prepare("UPDATE help_tickets SET status = 'answered', reply = ?, replied_at = ?, handled_by = ? WHERE id = ?").run(reply, now(), req.user.public_id, t.id);
+    audit.log({ action: 'help.ticket_answered', entity: 'help', entityId: t.public_id, req });
+    emit(t.user_id, 'help', { ref: t.public_id });
+    return { ok: true };
   }));
 
   admin.get('/safety-events', route(() => db.prepare('SELECT * FROM safety_events ORDER BY id DESC LIMIT 200').all()));

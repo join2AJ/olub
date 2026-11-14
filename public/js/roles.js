@@ -5,11 +5,25 @@ const VEH_ICON = { bike: 'bolt', auto: 'car', hatchback: 'car', sedan: 'car', su
 const CAR_ICON = '<svg viewBox="0 0 24 44" width="22" height="40"><rect x="2" y="2" width="20" height="40" rx="8" fill="#fff" stroke="#1b1f1d" stroke-width="1.6"/><rect x="5" y="9" width="14" height="8" rx="3" fill="#1b1f1d"/><rect x="5" y="28" width="14" height="6" rx="3" fill="#1b1f1d"/><rect x="3" y="19" width="18" height="3" fill="#22b455"/></svg>';
 
 // ======================= CUSTOMER =======================
+/** Short line for a ride in progress. */
+const RIDE_WORD = { requested: 'Finding a cab', accepted: 'Cab on the way', started: 'On the way', completed: 'Arrived — to pay' };
+function ridesBar(current) {
+  const live = S.liveTrips || []; if (!live.length) return '';
+  return `<div class="rides">${live.map((t) => `<button data-ride="${t.id}" class="${current === t.id ? 'on' : ''}"><span class="rd ${t.status}"></span><span class="rt"><b>${esc(t.guest ? `For ${t.guest.name}` : 'Your ride')}</b><span>${esc(RIDE_WORD[t.status] || t.status)} · ${esc(t.dst.name)}</span></span></button>`).join('')}
+    ${live.length < S.cfg.maxLiveRides ? `<button id="ride-new" class="${S.bookNew ? 'on' : ''}"><span class="rd plus">${ic('plus')}</span><span class="rt"><b>Book another</b><span>For someone else</span></span></button>` : ''}</div>`;
+}
+function bindRidesBar() {
+  $$('[data-ride]').forEach((x) => { x.onclick = run(async () => { const t = S.liveTrips.find((r) => String(r.id) === x.dataset.ride); if (!t) return; S.trip = t; S.bookNew = false; S.messages = await api('GET', `/api/trips/${t.id}/messages`).catch(() => []); S.msgTrip = t.id; render(); window.scrollTo(0, 0); }); });
+  if ($('#ride-new')) $('#ride-new').onclick = () => { S.bookNew = true; S.estimate = null; S.nearby = null; S.quote = null; S.booking = { mode: 'plate', driver: '', src: null, dst: null, pet: false, forGuest: true }; render(); window.scrollTo(0, 0); };
+}
+
 function renderRider(app) {
-  if (S.trip) return renderRiderTrip(app, S.trip);
+  if (S.trip && !S.bookNew) return renderRiderTrip(app, S.trip);
   const b = S.booking;
   app.innerHTML = `
     <div id="hmap" class="map hero-map"></div>
+    ${ridesBar(null)}
+    ${S.bookNew ? `<div class="card soft small">${ic('users')} You already have a ride in progress, so this one is for <b>someone else</b>. Set the pickup to where they are and add their name under Preferences.</div>` : ''}
     <div class="card sheet-card">
       <h2>Where to?</h2>
       <div class="route">
@@ -34,6 +48,7 @@ function renderRider(app) {
     api('GET', `/api/drivers/nearby?lat=${w.lat}&lng=${w.lng}`).then((cabs) => { if (S.map && !S.booking.src) S.map.setCabs(cabs); }).catch(() => {});
     const t = $('#pick-src .t'); if (t && b.gpsFailed) t.textContent = `Choose pickup point · ${w.name}`;
   });
+  bindRidesBar();
   const setPoint = (k) => (p) => { b[k] = p; b.autoFailed = false; S.estimate = null; S.nearby = null; S.quote = null; render(); };
   $('#pick-src').onclick = () => placePicker('Pickup point', setPoint('src'));
   $('#pick-dst').onclick = () => placePicker('Destination', setPoint('dst'));
@@ -42,7 +57,7 @@ function renderRider(app) {
   // As soon as both ends are known, fetch the road route, nearby cabs and fares.
   if (b.src && b.dst && !S.estimate && !b.loading && !b.autoFailed) {
     b.loading = true;
-    loadFares().then(() => { if (S.tab === 'home' && !S.trip) render(); }).catch((e) => { b.autoFailed = true; toast(e.message, true); const l = $('#loading'); if (l) l.outerHTML = '<button class="btn ghost block" id="retry">Try again</button>'; const r = $('#retry'); if (r) r.onclick = () => { b.autoFailed = false; render(); }; }).finally(() => { b.loading = false; });
+    loadFares().then(() => { if (S.tab === 'home' && (!S.trip || S.bookNew)) render(); }).catch((e) => { b.autoFailed = true; toast(e.message, true); const l = $('#loading'); if (l) l.outerHTML = '<button class="btn ghost block" id="retry">Try again</button>'; const r = $('#retry'); if (r) r.onclick = () => { b.autoFailed = false; render(); }; }).finally(() => { b.loading = false; });
   }
   if (S.estimate) showEstimate();
   if (S.quote) showQuote();
@@ -60,6 +75,12 @@ function guestBody() {
   return b.forGuest && b.guest && (b.guest.id || b.guest.name) ? b.guest : undefined;
 }
 
+/** A second ride at the same time has to be for someone else: ask who, before booking. */
+function needsGuest() {
+  if (!(S.liveTrips || []).some((t) => !t.guest) || guestBody()) return false;
+  S.booking.forGuest = true; toast('Add the name of the person this ride is for', true); prefsSheet(); return true;
+}
+
 // Preferences: who the ride is for, and pets.
 async function prefsSheet() {
   const b = S.booking; const g = b.guest || {};
@@ -72,12 +93,15 @@ async function prefsSheet() {
       <p class="muted small" style="margin:6px 0 0">Set the pickup to where they are. They get their own Olub guest ID.</p>
     </div>
     <div class="toggle"><span>${ic('paw')} Travelling with a pet</span><label class="switch"><input type="checkbox" id="pf-pet" ${b.pet ? 'checked' : ''}><i></i></label></div>
-    <p class="muted small">Only cabs whose driver accepts pets are shown. The driver's pet charge, if any, is added to the fare.</p>
+    <div id="pf-petbox" ${b.pet ? '' : 'hidden'}><label class="f">What kind of pet?</label><div class="seg" id="pf-kind">${Object.entries(S.cfg.petTypes).map(([k, l]) => `<button type="button" data-k="${k}" class="${(b.pet || 'dog') === k ? 'on' : ''}">${esc(l.replace(' small pet', ''))}</button>`).join('')}</div></div>
+    <p class="muted small">Only cabs whose driver accepts pets are shown. Each driver sets a charge for each kind of pet; it is added to the fare before you book.</p>
     <button id="pf-save" class="btn block">Done</button>`);
   $('#pf-guest', sh.el).onchange = (e) => { $('#pf-gbox').hidden = !e.target.checked; };
+  $('#pf-pet', sh.el).onchange = (e) => { $('#pf-petbox').hidden = !e.target.checked; };
+  $$('#pf-kind button', sh.el).forEach((x) => { x.onclick = () => $$('#pf-kind button', sh.el).forEach((y) => y.classList.toggle('on', y === x)); });
   $('#pf-gsel', sh.el).onchange = (e) => { $('#pf-gnew').hidden = !!e.target.value; };
   $('#pf-save', sh.el).onclick = run(async () => {
-    const forGuest = $('#pf-guest').checked; const sel = $('#pf-gsel').value; const pet = $('#pf-pet').checked;
+    const forGuest = $('#pf-guest').checked; const sel = $('#pf-gsel').value; const pet = $('#pf-pet').checked ? ($('#pf-kind .on') ? $('#pf-kind .on').dataset.k : 'dog') : false;
     if (forGuest && !sel && !$('#pf-gname').value.trim()) throw new Error("Enter the person's name");
     b.forGuest = forGuest;
     b.guest = forGuest ? (sel ? { id: Number(sel), name: guests.find((x) => String(x.id) === sel).name } : { name: $('#pf-gname').value.trim(), phone: $('#pf-gphone').value.trim() }) : null;
@@ -129,7 +153,9 @@ function showEstimate() {
   $('#paytoggle').onclick = () => { b.payTiming = b.payTiming === 'end' ? 'start' : 'end'; $('#paytoggle span').textContent = `Pay at the ${b.payTiming}`; };
   $('#prefs').onclick = run(prefsSheet);
   if ($('#book')) $('#book').onclick = run(async () => {
-    await api('POST', '/api/trips', { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming, match: b.pick === 'any' ? {} : { vehicleType: b.pick } });
+    if (needsGuest()) return;
+    S.trip = await api('POST', '/api/trips', { src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming, match: b.pick === 'any' ? {} : { vehicleType: b.pick } });
+    S.bookNew = false; S.messages = []; S.msgTrip = S.trip.id;
     S.quote = null; S.estimate = null; S.nearby = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
     await refreshTrip(); render(); window.scrollTo(0, 0);
   });
@@ -164,7 +190,9 @@ function showQuote() {
   </div>`;
   $$('#payt button').forEach((x) => { x.onclick = () => { b.payTiming = x.dataset.p; $$('#payt button').forEach((y) => y.classList.toggle('on', y === x)); }; });
   $('#request').onclick = run(async () => {
-    await api('POST', '/api/trips', { driver: b.driver, src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming });
+    if (needsGuest()) return;
+    S.trip = await api('POST', '/api/trips', { driver: b.driver, src: pointBody(b.src), dst: pointBody(b.dst), pet: b.pet, guest: guestBody(), payTiming: b.payTiming });
+    S.bookNew = false; S.messages = []; S.msgTrip = S.trip.id;
     S.quote = null; S.estimate = null; S.nearby = null; S.booking = { mode: 'plate', driver: '', src: b.src, dst: null, pet: false };
     await refreshTrip(); render(); window.scrollTo(0, 0);
   });
@@ -191,10 +219,12 @@ function renderRiderTrip(app, t) {
     started: ['On the way', t.lateMin ? `Running ${t.lateMin} min late` : `Reaching in about ${Math.max(1, Math.round((t.expectedEndAt - Date.now()) / 60000))} min`],
     completed: [t.paidAt ? 'You have arrived' : 'You have arrived — please pay', `${esc(t.dst.name)}`],
   }[t.status];
+  const searching = t.status === 'requested' && t.matched; // no driver has said yes yet, so nothing about a driver is shown
   app.innerHTML = `
     ${t.status === 'completed' ? '' : tripMapHtml(t)}
+    ${ridesBar(t.id)}
     <div class="card">${steps(t.status)}
-      ${t.status === 'requested' ? `<div class="radar">${ic('car')}</div><div class="searching"></div>` : ''}
+      ${t.status === 'requested' ? `<div class="radar-wrap"><div class="radar">${ic('car')}</div></div><div class="searching"></div>` : ''}
       ${t.status === 'completed' ? '<div class="success"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.500 4.500L19 7.500"/></svg></div>' : ''}
       <h2 class="center">${head[0]}</h2><p class="muted center">${head[1]}</p>
       ${t.guest ? `<p class="center"><span class="chip">${ic('users')}For ${esc(t.guest.name)} · ${esc(t.guest.publicId)}</span></p>` : ''}
@@ -202,7 +232,7 @@ function renderRiderTrip(app, t) {
       ${t.overdueLevel && t.status === 'started' ? `<div class="card alert"><b>${ic('alert')} Running ${t.lateMin} min late.</b> ${esc((t.trusted && t.trusted.name) || 'Your contact')} has been told.<button id="im-safe" class="btn block">I'm safe</button></div>` : ''}
       ${['requested', 'accepted'].includes(t.status) ? '<button id="cancel" class="btn ghost block">Cancel ride</button>' : ''}
     </div>
-    <div class="card">${driverCard(t.driver)}</div>
+    ${searching ? `<div class="card soft small">${ic('lock')} Driver and vehicle details appear here as soon as a driver accepts.</div>` : `<div class="card">${driverCard(t.driver)}</div>`}
     ${safetyRow(t)}
     ${t.canVerifyDriver ? `<div class="card soft"><h2>${ic('shield')} Verify your driver, get ${rs(S.cfg.verifyDiscount)} off</h2>
       <p class="muted">This driver is new on Olub. Please check in person:</p>
@@ -211,8 +241,8 @@ function renderRiderTrip(app, t) {
       <label class="check"><input type="checkbox" id="c2"><span>The number plate reads <b>${esc(t.driver.vehicleNumber)}</b></span></label>
       <label class="check"><input type="checkbox" id="c3"><span>The vehicle is a ${esc(t.driver.vehicleLabel)} ${esc(t.driver.vehicleModel || '')}</span></label>
       <button id="verify" class="btn block">Confirm and verify</button></div>` : ''}
-    <div class="card"><h3 style="margin-top:0">${t.final ? 'Your bill' : 'Fare'}</h3>${fareTable(f, { final: !!t.final })}
-      <div style="margin-top:10px">${payBlock(t, false)}</div>
+    <div class="card farefold" data-fold="fare-${t.final ? 'bill' : 'est'}" ${t.final ? 'data-open' : ''} data-sum="${searching ? 'Estimate for the cab being asked · tap for details' : 'Tap to see every line'}"><h2><span>${t.final ? 'Your bill' : 'You pay'}</span><span class="amt">${rs(f.riderPays)}</span></h2>${fareTable(f, { final: !!t.final })}</div>
+    <div class="card"><div>${payBlock(t, false)}</div>
       ${t.status === 'completed' ? `<div class="row" style="margin-top:10px"><button id="inv" class="btn ghost grow">${ic('file')}Invoice</button>${t.rated ? '' : `<button id="rate" class="btn ghost grow">${ic('star')}Rate driver</button>`}</div>` : ''}
       ${t.safety && t.safety.score != null ? `<p class="muted small" style="margin-top:8px">${ic('shield')} Driving safety score for this ride: <b>${t.safety.score}</b>/100</p>` : ''}
       ${t.paidAt ? '<button id="done" class="btn block">Done</button>' : ''}</div>
@@ -229,8 +259,8 @@ function renderRiderTrip(app, t) {
   on('#paycash', pay('cash')); on('#payupi', pay('upi'));
   on('#inv', () => invoiceSheet(t.id));
   if ($('#rate')) $('#rate').onclick = () => ratingSheet(t);
-  if ($('#done')) $('#done').onclick = () => { S.trip = null; render(); };
-  bindSafety(t); bindComms(t);
+  if ($('#done')) $('#done').onclick = () => { S.trip = (S.liveTrips || []).find((x) => x.id !== t.id) || null; S.msgTrip = null; render(); };
+  bindRidesBar(); bindSafety(t); bindComms(t);
 }
 
 // ======================= DRIVER =======================
@@ -321,7 +351,9 @@ function renderVehicle(app) {
     <div class="card" data-fold="v-rules" ${d.status === 'verified' ? '' : 'data-open'} data-sum="Smoking, pets and more"><h2>My cab rules</h2><p class="muted small">Customers see these before booking.</p>
       ${Object.entries(S.cfg.driverRules).map(([k, l]) => `<div class="toggle"><span>${ic('ban')} ${esc(l)}</span><label class="switch"><input type="checkbox" data-rule="${k}" ${prefs[k] ? 'checked' : ''}><i></i></label></div>`).join('')}
       <div class="toggle"><span>${ic('paw')} I am OK to travel with pets</span><label class="switch"><input type="checkbox" id="v-pets" ${prefs.petsOk ? 'checked' : ''}><i></i></label></div>
-      <div id="petbox" ${prefs.petsOk ? '' : 'hidden'}><label class="f">Extra charge for a pet (₹0–${S.cfg.maxPetCharge})</label><input id="v-petc" type="number" inputmode="numeric" value="${prefs.petCharge || 0}"></div>
+      <div id="petbox" ${prefs.petsOk ? '' : 'hidden'}><label class="f">Extra charge for each kind of pet (₹0–${S.cfg.maxPetCharge})</label>
+        <div class="grid2">${Object.entries(S.cfg.petTypes).map(([k, l]) => `<div><label class="f" style="margin-top:6px">${esc(l)}</label><input data-petc="${k}" type="number" inputmode="numeric" min="0" max="${S.cfg.maxPetCharge}" value="${(prefs.petCharges && prefs.petCharges[k] != null ? prefs.petCharges[k] : prefs.petCharge) || 0}"></div>`).join('')}</div>
+        <p class="muted small" style="margin:8px 0 0">${ic('lock')} Pet charges cannot be changed during a ride. Change them after the ride ends; the new charges apply from your next ride.</p></div>
     </div>
     <div class="card soft legal"><h3 style="margin-top:0">My safety pledge</h3>${S.legal.docs.driver_conduct.body.map((p) => `<p>${esc(p)}</p>`).join('')}
       <h3>Liability</h3>${S.legal.docs.driver_terms.body.slice(4, 6).map((p) => `<p>${esc(p)}</p>`).join('')}</div>
@@ -336,7 +368,8 @@ function renderVehicle(app) {
     });
   });
   $('#v-save').onclick = run(async () => {
-    const p = { petsOk: $('#v-pets').checked, petCharge: Number($('#v-petc').value) || 0 };
+    const p = { petsOk: $('#v-pets').checked, petCharges: {} };
+    $$('[data-petc]').forEach((c) => { p.petCharges[c.dataset.petc] = Number(c.value) || 0; });
     $$('[data-rule]').forEach((c) => { p[c.dataset.rule] = c.checked; });
     const r = await api('PUT', '/api/driver/profile', {
       vehicleNumber: $('#v-num').value, vehicleType: $('#v-type').value, condition: $('#v-cond').value, vehicleModel: $('#v-model').value, state: $('#v-state').value,
@@ -375,7 +408,8 @@ function renderDriverTrip(app, t) {
       <div class="row" style="margin-top:8px"><div class="grow"><input id="tamt" type="number" inputmode="numeric" placeholder="Amount paid ₹"></div><label class="btn small ghost">${ic('camera')}Receipt<input id="tphoto" type="file" accept="image/*" capture="environment" hidden></label></div>
       <button id="addtoll" class="btn ghost block">Add toll here</button>
       <p class="muted small" style="margin-top:8px">New tolls are charged at the state default (${rs(S.cfg.stateDefaultToll[t.state] || S.cfg.defaultToll)}) until ${S.cfg.tollConfirmationsRequired} more drivers confirm the amount.</p></div>` : ''}
-    <div class="card"><h3 style="margin-top:0">${t.final ? 'Final bill' : 'Fare'}</h3>${fareTable(f, { final: !!t.final, forDriver: true })}
+    <div class="card farefold" data-fold="dfare-${t.final ? 'bill' : 'est'}" ${t.final ? 'data-open' : ''} data-sum="Customer pays ${rs(f.riderPays)} · tap to see every line"><h2><span>You keep</span><span class="amt">${rs(f.driverFare)}</span></h2>${fareTable(f, { final: !!t.final, forDriver: true })}</div>
+    <div class="card">
       <div style="margin-top:10px">${payBlock(t, true)}</div>
       ${t.status === 'completed' ? `<div class="row" style="margin-top:10px"><button id="inv" class="btn ghost grow">${ic('file')}Invoice</button>${t.rated ? '' : `<button id="rate" class="btn ghost grow">${ic('star')}Rate customer</button>`}</div>` : ''}
       ${t.safety && t.safety.score != null ? `<p class="muted small" style="margin-top:8px">${ic('shield')} Your safety score for this ride: <b>${t.safety.score}</b>/100${t.safety.overspeed ? ` · ${t.safety.overspeed} overspeed` : ''}${t.safety.harshBrakes ? ` · ${t.safety.harshBrakes} harsh braking` : ''}</p>` : ''}
@@ -414,14 +448,42 @@ function renderDriverTrip(app, t) {
 }
 
 // ======================= ADMIN =======================
-const ADMIN_TABS = [['compliance', 'Compliance'], ['demo', 'Demo data'], ['drivers', 'Driver KYC'], ['authority', 'Police / RTO'], ['privacy', 'Privacy requests'], ['feedback', 'Feedback'], ['users', 'People & audit'], ['rates', 'Rates'], ['calamity', 'Rain / calamity'], ['tolls', 'Tolls'], ['outbox', 'Messages']];
+const ADMIN_GROUPS = [
+  ['Needs your attention', [['drivers', 'Driver KYC', 'id'], ['help', 'Help issues', 'chat'], ['privacy', 'Privacy requests', 'lock'], ['authority', 'Police / RTO', 'shield']]],
+  ['Running Olub', [['compliance', 'Compliance', 'check'], ['users', 'People & audit', 'users'], ['feedback', 'Feedback', 'star'], ['tolls', 'Tolls', 'pin'], ['outbox', 'Messages', 'mail']]],
+  ['Settings', [['rates', 'Rates', 'wallet'], ['calamity', 'Rain / calamity', 'cloud'], ['demo', 'Demo data', 'sparkle']]],
+];
+const ADMIN_TABS = ADMIN_GROUPS.flatMap((g) => g[1]);
 
 async function renderAdmin(app) {
-  if (!ADMIN_TABS.some((t) => t[0] === S.sub)) S.sub = 'compliance';
-  app.innerHTML = `<div class="subtabs">${ADMIN_TABS.map(([k, l]) => `<button data-sub="${k}" class="${S.sub === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="pane"><div class="skel"></div><div class="skel"></div></div>`;
-  $$('[data-sub]').forEach((b) => { b.onclick = () => { S.sub = b.dataset.sub; render(); }; });
+  const cur = ADMIN_TABS.find((t) => t[0] === S.sub);
+  if (!cur) return adminHome(app);
+  app.innerHTML = `<div class="ahead"><button id="aback" class="btn small ghost">${ic('left')}Admin</button><h1>${cur[1]}</h1></div><div id="pane"><div class="skel"></div><div class="skel"></div></div>`;
+  $('#aback').onclick = () => { S.sub = null; render(); };
   const pane = $('#pane'); const sub = S.sub;
   try { await ADMIN[sub](pane); applyScroll(); } catch (e) { if (S.sub === sub) pane.innerHTML = `<div class="card alert">${esc(e.message)}</div>`; }
+}
+
+/** The admin's first screen: the numbers that matter and one tile per job. */
+async function adminHome(app) {
+  app.innerHTML = '<div class="skel"></div><div class="skel"></div>';
+  const [c, issues] = await Promise.all([api('GET', '/api/admin/compliance'), api('GET', '/api/admin/help').catch(() => [])]);
+  if (S.tab !== 'home' || S.sub || !S.me || S.me.role !== 'admin') return;
+  const n = { drivers: c.drivers.awaitingVerification, help: issues.filter((t) => t.status === 'open').length, privacy: (c.privacyRequests && c.privacyRequests.received) || 0, authority: (c.authorityRequests && c.authorityRequests.under_review) || 0 };
+  const hint = {
+    drivers: n.drivers ? `${n.drivers} waiting to be checked` : `${c.drivers.verified} of ${c.drivers.total} verified`, help: n.help ? `${n.help} waiting for a reply` : 'Nothing waiting',
+    privacy: n.privacy ? `${n.privacy} to answer` : 'Nothing waiting', authority: n.authority ? `${n.authority} under review` : `${c.activeVehicleFlags} vehicles flagged`,
+    compliance: `Olub share ${c.trips.commissionPercent}% · audit log ${c.auditLog.ok ? 'intact' : 'BROKEN'}`, users: 'Find a person, see their trail', feedback: 'Ratings and comments with names',
+    tolls: 'Reported by drivers', outbox: 'SMS and email queue', rates: 'Per-km rate card', calamity: 'Half Olub fee in bad weather', demo: 'Sample drivers, customers, trips',
+  };
+  const todo = n.drivers + n.help + n.privacy + n.authority;
+  app.innerHTML = `
+    <div class="dash adash"><div class="between" style="position:relative;z-index:1"><span class="muted">Olub today</span><span class="chip ${todo ? 'warn' : ''}">${todo ? `${todo} need${todo === 1 ? 's' : ''} you` : 'All clear'}</span></div>
+      <div class="bignum" style="position:relative;z-index:1">${c.trips.completed}<small> completed trips</small></div>
+      <div class="mini"><div><b>${c.drivers.online}</b><span>drivers online</span></div><div><b>${rs(Math.round(c.trips.rideGst + c.trips.platformFeeGst))}</b><span>GST to remit</span></div><div><b>${c.safety.sos || 0}</b><span>SOS pressed</span></div></div></div>
+    ${ADMIN_GROUPS.map(([g, items]) => `<h3 class="grp">${g}</h3><div class="tiles admin">${items.map(([k, l, i]) => `<button data-sub="${k}" class="${n[k] ? 'hot' : ''}">${n[k] ? `<em>${n[k]}</em>` : ''}<span class="ti">${ic(i)}</span><b>${l}</b><span>${esc(hint[k] || '')}</span></button>`).join('')}</div>`).join('')}`;
+  $$('[data-sub]').forEach((b) => { b.onclick = () => { S.sub = b.dataset.sub; render(); window.scrollTo(0, 0); }; });
+  applyScroll();
 }
 const download = (name, text) => {
   if (Native && Native.saveText) return Native.saveText(name, text);
@@ -486,7 +548,7 @@ const ADMIN = {
   async authority(pane) {
     const [reqs, flags] = await Promise.all([api('GET', '/api/admin/lea'), api('GET', '/api/admin/flags')]);
     pane.innerHTML = `
-      <div class="card soft small">Officers apply at <b>${esc(S.base || location.origin)}/authority</b> with a government email and a signed letter. Data requests are answered automatically ${S.cfg.lea.publicDays > 3 ? 'after the 3-day review window' : ''} unless you refuse them here. Every step is in the audit log.</div>
+      <div class="card soft small">Officers apply at <b>${esc(S.base || location.origin)}/authority</b> with a government email and a signed letter. They must confirm the email, and declare the request is genuine. Data requests are closed automatically after 48 hours unless you refuse them here (officers are told ${esc(S.cfg.lea.publicDays)}). Every step is in the audit log.</div>
       <div class="card"><h2>Flagged vehicles</h2><div class="list">${flags.map((f) => `<div><div class="between"><span><span class="plate">${esc(f.vehicleNumber)}</span> ${f.driver ? esc(f.driver.name) : '<span class="muted">not on Olub</span>'}</span><span class="chip ${f.status === 'active' ? 'danger' : 'grey'}">${esc(f.status)}</span></div>
         <div class="muted small">${esc(S.cfg.lea.agencies[f.agency] || '')} · ${esc(f.officer || '')} · ${esc(f.caseRef || '')} · ${when(f.createdAt)}</div><p class="small" style="margin:4px 0">${esc(f.reason)}</p>
         ${f.status === 'active' ? `<div class="row">${f.driver ? `<button class="btn small ${f.driver.suspended ? 'ghost' : 'danger'}" data-susp="${f.driver.id}" data-on="${f.driver.suspended ? '' : '1'}">${f.driver.suspended ? 'Lift hold' : 'Put driver on hold'}</button>` : ''}<button class="btn small ghost" data-clear="${f.id}">Clear flag</button></div>` : ''}</div>`).join('') || '<p class="muted">No flags.</p>'}</div></div>
