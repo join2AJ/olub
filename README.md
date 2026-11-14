@@ -31,7 +31,7 @@ Needs Node.js 22.13 or newer. No database to install.
 ```bash
 npm install
 npm start        # http://localhost:3000
-npm test         # 29 automated tests
+npm test         # 30 automated tests
 npm run backup   # consistent copy of the database
 ```
 

@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **14 Nov 2026, 01:49 IST**
+Last updated: **14 Nov 2026, 09:00 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 113 complete · 11 in progress · 6 planned · 10 need you
+**Totals:** 124 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -190,6 +190,17 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.34 | Modern map | ✅ Complete | 14 Nov 2026, 01:49 | Sharp vector map in Olub's own colours (light and dark) in place of the old picture tiles; cleaner pins and a button to recentre. Map data comes from the free OpenFreeMap service (no key, no uptime promise). If a phone cannot draw it, the app falls back to the old map by itself. Checked in the browser, not yet on a real phone |
 | 10.35 | Tap a heading to reveal details | ✅ Complete | 14 Nov 2026, 01:49 | Long pages are now short lists of headings with a one-line summary; tapping one opens it and the app remembers what you left open. Used on passenger Activity and Safety, driver Earnings and Vehicle pages, admin Compliance, and "Cab right in front of you?" on the booking screen |
 | 10.36 | Map on the driver's home screen | ✅ Complete | 14 Nov 2026, 01:49 | Shows where the cab is and the search grid while online |
+| 10.37 | No driver or vehicle details while still searching | ✅ Complete | 14 Nov 2026, 09:00 | Until a driver accepts, the passenger sees only "Finding your cab"; the ride code also appears only after a driver accepts |
+| 10.38 | Searching animation given room | ✅ Complete | 14 Nov 2026, 09:00 |  |
+| 10.39 | Ratings moved into Profile; Help takes its place in the bottom bar | ✅ Complete | 14 Nov 2026, 09:00 |  |
+| 10.40 | Ongoing rides strip, and a second ride for someone else | ✅ Complete | 14 Nov 2026, 09:00 | A strip on the Ride screen lists every ride in progress and "Book another". One ride for yourself plus rides for other people, up to 3 at once. Activity → Live also lists them |
+| 10.41 | Safety: "On every ride" starts closed | ✅ Complete | 14 Nov 2026, 09:00 |  |
+| 10.42 | Fare collapsed, with "Know more" | ✅ Complete | 14 Nov 2026, 09:00 | Shows the amount; tap for the lines; "Know more" explains distance, rate, multipliers, waiting, pet charge, tolls, GST and Olub fee |
+| 10.43 | Pet charge for each kind of pet; locked during a ride | ✅ Complete | 14 Nov 2026, 09:00 | Dog, cat, bird, other. A driver cannot change pet settings while a ride is accepted or running; new charges apply from the next ride |
+| 10.44 | Profile redesigned | ✅ Complete | 14 Nov 2026, 09:00 | Photo or initials, rating and stats, tiles for the main jobs, grouped lists |
+| 10.45 | Government officials section | ✅ Complete | 14 Nov 2026, 09:00 | In Profile and on the sign-in screen. Officer confirms a government email, attaches a letter and must declare the request is genuine. Closed automatically after 48 hours; the app says 3–5 days. Everything is recorded. Caution: this still releases data without a person reading the letter unless an admin refuses in time — get legal advice before launch |
+| 10.46 | Help: common issues and the Olub Cha assistant | ✅ Complete | 14 Nov 2026, 09:00 | 27 topics covering passenger–driver problems. Olub Cha answers from Olub's policies and the asker's own records only, and refuses other people's details. It matches keywords; it is not an AI model. Issues can be raised to Olub and admins reply in the app |
+| 10.47 | Admin home redesigned | ✅ Complete | 14 Nov 2026, 09:00 | One dashboard with today's numbers and a tile per job, with counts on the ones that need attention; each opens its own page with a back button |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |
