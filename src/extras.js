@@ -232,7 +232,7 @@ module.exports = function registerExtras(x) {
     const officer = text(b.officerName, 80); const caseRef = text(b.caseRef, 120);
     if (!officer || !text(b.designation, 80) || !text(b.office, 120)) throw httpError(400, 'Enter your name, designation and office / station');
     if (!caseRef) throw httpError(400, 'Enter the FIR / case / file reference');
-    if (!b.proof || !/^data:(image\/|application\/pdf)/.test(b.proof)) throw httpError(400, 'Attach the signed request letter or authorisation (photo or PDF)');
+    if (!b.proof || !T.isSafeImage(b.proof, { pdf: true })) throw httpError(400, 'Attach the signed request letter or authorisation (photo or PDF)');
     if (b.proof.length > 4_000_000) throw httpError(400, 'Attachment too large (max ~3MB)');
     const vehicle = x.normVehicle(b.vehicleNumber) || null;
     const driverId = text(b.driverId, 20)?.toUpperCase() || null;
@@ -260,6 +260,11 @@ module.exports = function registerExtras(x) {
     if (!r) throw httpError(404, 'Request not found or already verified');
     if (String(req.body.code) !== r.email_code) {
       audit.log({ action: 'lea.wrong_code', entity: 'lea', entityId: r.public_id, req });
+      // Five wrong codes close the request; the officer has to apply again.
+      if (db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'lea.wrong_code' AND entity_id = ?").get(r.public_id).n >= 5) {
+        db.prepare("UPDATE lea_requests SET status = 'rejected', resolved_at = ?, handled_by = 'auto', response = 'Too many wrong verification codes' WHERE id = ?").run(now(), r.id);
+        throw httpError(429, 'Too many wrong codes. Please submit the request again.');
+      }
       throw httpError(400, 'Wrong code');
     }
     const key = crypto.randomBytes(18).toString('hex');
@@ -427,7 +432,7 @@ module.exports = function registerExtras(x) {
     });
   }));
 
-  // ================= Help: Olub Cha and issues =================
+  // ================= Help: Olub Chat and issues =================
   const help = require('./help');
   /** Only the asker's own records — never anyone else's. */
   function helpContext(user) {

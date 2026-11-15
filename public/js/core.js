@@ -212,6 +212,8 @@ function decodePolyline(str) {
 }
 
 // ---------- maps (Leaflet + OpenStreetMap tiles) ----------
+// Closing a map while it is still loading cancels its downloads; that is expected, not an error.
+window.addEventListener('unhandledrejection', (e) => { if (e.reason && e.reason.name === 'AbortError') e.preventDefault(); });
 const MAP_BASE = ((document.currentScript && document.currentScript.src) || '').replace(/js\/core\.js.*$/, 'vendor/map/');
 const canVector = () => {
   if (canVector.v != null) return canVector.v;

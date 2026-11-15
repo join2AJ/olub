@@ -18,6 +18,7 @@ function exportUserData(db, userId) {
     trips: all(db, `SELECT id, status, src_name, dst_name, distance_km, quote, final, pet, payment_method, created_at, started_at, completed_at
       FROM trips WHERE rider_id = ? OR driver_id = ?`, userId, userId),
     messagesSent: all(db, 'SELECT trip_id, body, created_at FROM messages WHERE sender_id = ?', userId),
+    helpIssues: all(db, 'SELECT public_id, topic, text, trip_id, status, created_at, reply, replied_at FROM help_tickets WHERE user_id = ?', userId),
     ratingsGiven: all(db, 'SELECT trip_id, scores, overall, good, bad, improve, created_at FROM ratings WHERE from_id = ?', userId),
     // Received feedback is given without the author's identity.
     ratingsReceived: all(db, 'SELECT scores, overall, good, bad, improve FROM ratings WHERE to_id = ?', userId),
@@ -43,6 +44,7 @@ function eraseUser(db, userId) {
     kyc_id_no = NULL, insurance_valid_till = NULL, docs = NULL, prefs = NULL, status = 'incomplete', online = 0 WHERE user_id = ?`).run(userId);
   db.prepare("UPDATE guests SET name = 'Deleted guest', phone = NULL WHERE owner_id = ?").run(userId);
   db.prepare("UPDATE messages SET body = '[deleted]' WHERE sender_id = ?").run(userId);
+  db.prepare("UPDATE help_tickets SET text = '[deleted]' WHERE user_id = ?").run(userId);
   db.prepare('UPDATE toll_reports SET photo = NULL WHERE driver_id = ?').run(userId);
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
   db.prepare('DELETE FROM email_otps WHERE user_id = ?').run(userId);

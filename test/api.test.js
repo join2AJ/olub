@@ -578,3 +578,30 @@ test('a second ride for someone else, pet charges by kind locked during a ride, 
   assert.match(tk.ref, /^HLP-/);
   assert.equal((await ok('GET', '/api/help', null, other)).tickets.length, 0, 'issues are private to the person who raised them');
 });
+
+test('audit fixes: unsafe picture addresses are refused; an old cancellation fee is collected on one ride only', async (t) => {
+  const s = await setup();
+  t.after(() => s.server.close());
+  const { call, ok } = s;
+  await s.makeDriver('9876910001', 'KA06AA0001');
+  await s.makeDriver('9876910002', 'KA06AA0002');
+  const rider = await s.makeRider('9876910003');
+
+  // A "picture" that tries to carry markup into the page is refused; a real one is accepted.
+  assert.equal((await call('PATCH', '/api/me', { photo: 'data:image/x" onerror="alert(1)' }, rider)).status, 400);
+  assert.equal((await call('PATCH', '/api/me', { photo: 'data:image/svg+xml;base64,PHN2Zy8+' }, rider)).status, 400);
+  await ok('PATCH', '/api/me', { photo: PIXEL }, rider);
+
+  // ₹15 owed from an earlier cancellation: it goes on the first ride, not on a second ride booked at the same time.
+  s.db.prepare("UPDATE users SET cancel_dues = 15 WHERE phone = '9876910003'").run();
+  const leg = { src: s.place('MG Road'), dst: s.place('Hebbal') };
+  const a = await ok('POST', '/api/trips', { driver: 'KA06AA0001', ...leg }, rider);
+  const b = await ok('POST', '/api/trips', { driver: 'KA06AA0002', ...leg, guest: { name: 'Ravi Uncle' } }, rider);
+  assert.equal(a.quote.dues, 15);
+  assert.equal(b.quote.dues, 0);
+
+  // Every reply carries the basic safety headers.
+  const res = await fetch(`http://127.0.0.1:${s.server.address().port}/api/config`);
+  assert.equal(res.headers.get('x-frame-options'), 'DENY');
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+});

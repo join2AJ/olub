@@ -63,7 +63,7 @@ function recomputeVerification(db, tollId) {
 function reportToll(db, driverId, input) {
   const amount = Number(input.amount);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) throw httpError(400, 'Enter the amount you paid at the toll');
-  if (!input.photo || !/^data:image\//.test(input.photo)) throw httpError(400, 'Upload a photo of the toll receipt / FASTag SMS');
+  if (!input.photo || !isSafeImage(input.photo)) throw httpError(400, 'Upload a photo of the toll receipt / FASTag SMS');
   if (input.photo.length > 3_000_000) throw httpError(400, 'Photo too large (max ~2MB)');
 
   let toll;
@@ -99,4 +99,9 @@ function httpError(status, message) {
   return Object.assign(new Error(message), { status });
 }
 
-module.exports = { tollAmount, tollsOnRoute, tollsForVehicle, reportToll, recomputeVerification, publicToll, httpError };
+/** Only real pictures (and PDFs where allowed): a strict data: address that cannot carry markup into a page. */
+function isSafeImage(v, { pdf = false } = {}) {
+  return typeof v === 'string' && (pdf ? /^data:(image\/(png|jpe?g|webp|gif)|application\/pdf);base64,[A-Za-z0-9+/=\s]+$/ : /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\s]+$/).test(v);
+}
+
+module.exports = { isSafeImage, tollAmount, tollsOnRoute, tollsForVehicle, reportToll, recomputeVerification, publicToll, httpError };

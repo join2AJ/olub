@@ -89,15 +89,20 @@ function whereAmI() {
 }
 
 // ---------------- live GPS during a ride ----------------
+function trackedTrip() {
+  const on = (t) => t && ['accepted', 'started'].includes(t.status);
+  if (S.me && S.me.role === 'rider') return (S.liveTrips || []).find((t) => on(t) && !t.guest) || null;
+  return on(S.trip) ? S.trip : null;
+}
 function syncTracking() {
-  const live = S.trip && ['accepted', 'started'].includes(S.trip.status);
+  const live = trackedTrip();
   if (!live) return stopTracking();
-  if (Native && Native.startTracking && S.me.role === 'driver') { Native.startTracking(S.base, S.token, String(S.trip.id)); S.nativeMode = 'trip'; } // keeps working with the screen off
+  if (Native && Native.startTracking && S.me.role === 'driver') { Native.startTracking(S.base, S.token, String(live.id)); S.nativeMode = 'trip'; } // keeps working with the screen off
   if (S.watchId != null || !navigator.geolocation) return;
   S.watchId = navigator.geolocation.watchPosition((p) => {
-    if (!S.trip || Date.now() - S.lastPing < 6000) return;
+    const tt = trackedTrip(); if (!tt || Date.now() - S.lastPing < 6000) return;
     S.lastPing = Date.now();
-    api('POST', `/api/trips/${S.trip.id}/location`, { lat: p.coords.latitude, lng: p.coords.longitude, kmph: p.coords.speed != null ? p.coords.speed * 3.6 : null }).catch(() => {});
+    api('POST', `/api/trips/${tt.id}/location`, { lat: p.coords.latitude, lng: p.coords.longitude, kmph: p.coords.speed != null ? p.coords.speed * 3.6 : null }).catch(() => {});
   }, () => {}, { enableHighAccuracy: true, maximumAge: 4000 });
 }
 // While a driver is online, tell Olub roughly where the cab is waiting so nearby customers can be matched.
@@ -304,7 +309,7 @@ function personalSheet() {
   let photo;  // undefined = unchanged
   const pic = () => (photo !== undefined ? photo : S.me.photo);
   const sh = sheet('Personal details', `
-    <div class="row" style="margin-bottom:6px"><div id="pp-box">${pic() ? `<img class="avatar" src="${pic()}" alt="" style="width:76px;height:76px">` : `<div class="avatar" style="width:76px;height:76px">${ic('user')}</div>`}</div>
+    <div class="row" style="margin-bottom:6px"><div id="pp-box">${pic() ? `<img class="avatar" src="${esc(pic())}" alt="" style="width:76px;height:76px">` : `<div class="avatar" style="width:76px;height:76px">${ic('user')}</div>`}</div>
       <div class="grow"><label class="btn small ghost" style="margin:0">${ic('camera')}${S.me.photo ? 'Change photo' : 'Add your photo'}<input id="pp" type="file" accept="image/*" hidden></label>
       <p class="muted small" style="margin:6px 0 0">${S.me.role === 'driver' ? 'Customers see this photo.' : 'Your driver sees this so they can recognise you.'}</p></div></div>
     <label class="f">Name</label><input id="pn" value="${esc(S.me.name || '')}">
@@ -317,7 +322,7 @@ function personalSheet() {
   $('#pp', sh.el).onchange = run(async (e) => {
     if (!e.target.files[0]) return;
     photo = await readImage(e.target.files[0], 360);
-    $('#pp-box').innerHTML = `<img class="avatar" src="${photo}" alt="" style="width:76px;height:76px">`;
+    $('#pp-box').innerHTML = `<img class="avatar" src="${esc(photo)}" alt="" style="width:76px;height:76px">`;
   });
   $('#pgo', sh.el).onclick = run(async () => saved(await api('PATCH', '/api/me', { name: $('#pn').value, dob: $('#pd').value, gender: g, ...(photo !== undefined && { photo }) }), sh, 'Saved'));
 }
@@ -418,7 +423,7 @@ function petChargeText(d) {
 }
 
 function driverCard(d) {
-  const img = d.photos && d.photos.selfie ? `<img class="avatar" src="${d.photos.selfie}" alt="">` : `<div class="avatar">${esc((d.name || 'D')[0])}</div>`;
+  const img = d.photos && d.photos.selfie ? `<img class="avatar" src="${esc(d.photos.selfie)}" alt="">` : `<div class="avatar">${esc((d.name || 'D')[0])}</div>`;
   const badge = d.status === 'verified' ? `<span class="chip">${ic('shield')}Verified</span>` : `<span class="chip warn">${ic('clock')}New — not yet verified</span>`;
   const person = [d.age && `${d.age} yrs`, d.gender && d.gender[0].toUpperCase() + d.gender.slice(1), d.drivingYears != null && `driving ${d.drivingYears} yrs`].filter(Boolean).join(' · ');
   return `<div class="driver">${img}<div class="grow" style="min-width:0">
@@ -829,21 +834,20 @@ function renderProfile(app) {
   const third = me.role === 'driver' ? [rs(me.driver.wallet.balance), 'Wallet'] : me.role === 'rider' ? [(S.liveTrips || []).length, 'Rides now'] : [me.emailVerified ? 'Yes' : 'No', 'Email confirmed'];
   app.innerHTML = `
     <div class="pf-hero">
-      <div class="pf-top">${me.photo ? `<img src="${me.photo}" alt="" class="pf-av">` : `<div class="pf-av">${esc(initials)}</div>`}
-        <div class="grow" style="min-width:0"><div class="pf-role">${{ rider: 'Olub customer', driver: 'Olub driver', admin: 'Olub admin' }[me.role]}</div>
-          <div class="pf-name">${esc(me.name)}</div>
-          <div class="muted small" style="color:#ffffffcc">${esc([me.age && `${me.age} yrs`, cap(me.gender)].filter(Boolean).join(' · '))}</div></div></div>
-      <div class="pid">${esc(me.publicId)}</div>
-      <div class="pf-stats"><div><b>${me.rating.count ? `${me.rating.average.toFixed(1)}` : 'New'}</b><span>Rating</span></div><div><b>${me.rating.count}</b><span>${me.rating.count === 1 ? 'Review' : 'Reviews'}</span></div><div><b>${third[0]}</b><span>${third[1]}</span></div></div>
-      <div class="chips" style="position:relative;z-index:1"><span class="chip">${ic('check')}Mobile confirmed</span>
-        <span class="chip ${me.emailVerified ? '' : 'warn'}">${ic(me.emailVerified ? 'check' : 'clock')}Email ${me.emailVerified ? 'confirmed' : 'not confirmed'}</span></div></div>
+      <div class="pf-ring">${me.photo ? `<img src="${esc(me.photo)}" alt="" class="pf-av">` : `<div class="pf-av">${esc(initials)}</div>`}<button class="pf-edit" data-open="personal" aria-label="Edit photo and details">${ic('camera')}</button></div>
+      <div class="pf-name">${esc(me.name)}</div>
+      <div class="pf-role">${{ rider: 'Customer', driver: 'Driver partner', admin: 'Administrator' }[me.role]}${me.age ? ` · ${me.age} yrs` : ''}${me.gender ? ` · ${esc(cap(me.gender))}` : ''}</div>
+      <button class="pf-id" id="pf-copy" aria-label="Copy my Olub ID">${ic('id')}<span>${esc(me.publicId)}</span>${ic('file')}</button>
+      <div class="pf-ticks"><span class="${''}">${ic('check')}Mobile confirmed</span><span class="${me.emailVerified ? '' : 'no'}">${ic(me.emailVerified ? 'check' : 'clock')}Email ${me.emailVerified ? 'confirmed' : 'pending'}</span></div>
+    </div>
+    <div class="pf-stats"><div><b>${me.rating.count ? `${me.rating.average.toFixed(1)}<i>${ic('star', 'fill')}</i>` : 'New'}</b><span>Rating</span></div><div><b>${me.rating.count}</b><span>${me.rating.count === 1 ? 'Review' : 'Reviews'}</span></div><div><b>${third[0]}</b><span>${third[1]}</span></div></div>
     ${todoCard()}
     <div class="tiles">
       ${tile('data-open="personal"', 'id', 'Personal details', esc([niceDate(me.dob), cap(me.gender)].filter(Boolean).join(' · ') || 'Photo, date of birth, sex'))}
       ${me.role === 'rider' ? tile('data-open="trusted"', 'heart', 'Trusted contact', me.trusted ? esc(me.trusted.name) : 'Required for rides') : ''}
       ${me.role === 'driver' ? tile('id="m-vehicle"', 'car', 'Vehicle & documents', `${esc(me.driver.vehicleNumber || 'Not added')} · ${esc(me.driver.status)}`) : ''}
       ${me.role !== 'admin' ? tile('id="m-ratings"', 'star', 'My ratings', me.rating.count ? `${me.rating.average.toFixed(1)} from ${plural(me.rating.count, 'review')}` : 'No ratings yet') : ''}
-      ${me.role !== 'admin' ? tile('id="m-help"', 'chat', 'Help', 'Ask Olub Cha or raise an issue') : ''}
+      ${me.role !== 'admin' ? tile('id="m-help"', 'chat', 'Help', 'Ask Olub Chat or raise an issue') : ''}
       ${me.role === 'admin' ? tile('data-open="email"', 'mail', 'Email', esc(me.email || 'Not added')) : ''}
     </div>
     ${me.role !== 'admin' ? `<h3 class="grp">Account</h3><div class="card menu">
@@ -859,6 +863,7 @@ function renderProfile(app) {
     </div>
     <button id="m-logout" class="btn ghost block logout">${ic('logout')}Log out</button>
     <p class="center muted small">${esc(S.cfg.company.grievanceOfficer)}<br>Olub connects customers and drivers. It does not provide the ride.</p>`;
+  $('#pf-copy').onclick = run(async () => { try { await navigator.clipboard.writeText(me.publicId); toast('Olub ID copied'); } catch { toast(me.publicId); } });
   if ($('#m-ratings')) $('#m-ratings').onclick = () => { S.sub = 'ratings'; render(); window.scrollTo(0, 0); };
   if ($('#m-help')) $('#m-help').onclick = () => { S.tab = 'help'; render(); window.scrollTo(0, 0); };
   $('#m-official').onclick = officialSheet;

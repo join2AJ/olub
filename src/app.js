@@ -69,6 +69,12 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'geolocation=(self), microphone=(self), camera=(self)', 'Cross-Origin-Opener-Policy': 'same-origin' });
+    next();
+  });
   app.use(express.json({ limit: '12mb' }));
   app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
 
@@ -92,8 +98,10 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
 
   // ---------- small in-memory rate limit for auth endpoints ----------
   const hits = new Map();
+  // Sign-in attempts are counted per address. Everyday actions by a signed-in person are counted per person,
+  // so asking Help questions can never lock anyone (or their neighbours on the same network) out of signing in.
   function rateLimit(req, _res, next) {
-    const k = req.ip; const t = now();
+    const k = req.user ? `u${req.user.id}` : req.ip; const t = now();
     const h = hits.get(k);
     if (!h || h.reset < t) hits.set(k, { n: 1, reset: t + C.AUTH_RATE_LIMIT.windowMs });
     else if (++h.n > C.AUTH_RATE_LIMIT.max) return next(httpError(429, 'Too many attempts. Please wait a few minutes.'));
@@ -352,7 +360,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
       waitMinutes: route.delayMin,
       tolls: T.tollsForVehicle(routeTolls, d.vehicle_type),
       petCharge: pet ? Math.min(C.MAX_PET_CHARGE, petChargesOf(prefs)[petType] || 0) : 0,
-      calamity: !!cal, dues: rider.cancel_dues,
+      calamity: !!cal, dues: duesToCollect(rider),
     });
     if (pet) quote.breakdown.petType = petType;
     quote.driverCompletedTrips = d.completed_trips;
@@ -695,7 +703,8 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
   function applyProfile(u, b) {
     const set = {};
     if (b.photo !== undefined) {
-      if (b.photo && (!/^data:image\//.test(b.photo) || b.photo.length > 400_000)) throw httpError(400, 'Choose a smaller photo');
+      if (b.photo && !T.isSafeImage(b.photo)) throw httpError(400, 'Choose a JPG or PNG photo');
+      if (b.photo && b.photo.length > 400_000) throw httpError(400, 'Choose a smaller photo');
       set.photo = b.photo || null;
     }
     if (b.name !== undefined) { set.name = text(b.name, 60); if (!set.name) throw httpError(400, 'Name is required'); }
@@ -790,6 +799,14 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
   });
 
   // ================= driver =================
+  /** An earlier cancellation fee goes on one ride only — not on every ride the customer has in progress. */
+  function duesToCollect(rider) {
+    if (!rider.cancel_dues) return 0;
+    const already = db.prepare("SELECT quote FROM trips WHERE rider_id = ? AND status IN ('requested','accepted','started')").all(rider.id)
+      .reduce((s, t) => s + ((json(t.quote) || {}).dues || 0), 0);
+    return Math.max(0, r2(rider.cancel_dues - already));
+  }
+
   /** The kind of pet a booking is for. Older apps send just `true`. */
   const petTypeOf = (v) => (typeof v === 'string' && C.PET_TYPES[v] ? v : v ? 'other' : null);
   /** A driver's charge for each kind of pet (older records have one charge for all). */
@@ -842,7 +859,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     for (const k of DOC_KEYS) {
       const v = b.docs?.[k];
       if (v) {
-        if (!/^data:(image\/|application\/pdf)/.test(v)) throw httpError(400, `${k} must be an image or PDF`);
+        if (!T.isSafeImage(v, { pdf: k !== 'selfie' && k !== 'vehicle' })) throw httpError(400, `${k} must be a JPG or PNG photo${k !== 'selfie' && k !== 'vehicle' ? ' or a PDF' : ''}`);
         if (v.length > 3_000_000) throw httpError(400, `${k} file is too large (max ~2MB)`);
         docs[k] = v;
       }
@@ -1085,6 +1102,7 @@ function createApp({ dbFile = path.join(__dirname, '..', 'data', 'olub-v8.db'), 
     const d = getDriver(req.user.id);
     db.prepare("UPDATE trips SET status = 'accepted', accepted_at = ? WHERE id = ?").run(now(), trip.id);
     for (const o of db.prepare("SELECT * FROM trips WHERE driver_id = ? AND status = 'requested' AND id != ?").all(req.user.id, trip.id)) {
+      if (o.match_mode) { offerNext(o, 'driver took another ride').catch(() => {}); continue; }
       db.prepare("UPDATE trips SET status = 'rejected' WHERE id = ?").run(o.id);
       notifyTrip(o);
     }

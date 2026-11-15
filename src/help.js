@@ -1,5 +1,5 @@
 'use strict';
-// Olub Cha — the in-app help assistant.
+// Olub Chat — the in-app help assistant.
 // It answers from Olub's published policies and from the signed-in person's OWN records only.
 // It never looks up or reveals anything about another person. It is a rule-based helper, not a human.
 

@@ -1,6 +1,6 @@
 # Olub — status of every point
 
-Last updated: **14 Nov 2026, 09:00 IST**
+Last updated: **15 Nov 2026, 14:23 IST**
 
 This is the single list of everything asked for Olub, and where each point stands. It is updated with every change to the app.
 
@@ -11,7 +11,7 @@ This is the single list of everything asked for Olub, and where each point stand
 | 📅 Planned | Not built yet |
 | 🧑‍💼 Needs you | Cannot be done in code: needs a company, licence, provider account or professional |
 
-**Totals:** 124 complete · 11 in progress · 6 planned · 10 need you
+**Totals:** 135 complete · 11 in progress · 6 planned · 10 need you
 
 ---
 
@@ -199,8 +199,19 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.43 | Pet charge for each kind of pet; locked during a ride | ✅ Complete | 14 Nov 2026, 09:00 | Dog, cat, bird, other. A driver cannot change pet settings while a ride is accepted or running; new charges apply from the next ride |
 | 10.44 | Profile redesigned | ✅ Complete | 14 Nov 2026, 09:00 | Photo or initials, rating and stats, tiles for the main jobs, grouped lists |
 | 10.45 | Government officials section | ✅ Complete | 14 Nov 2026, 09:00 | In Profile and on the sign-in screen. Officer confirms a government email, attaches a letter and must declare the request is genuine. Closed automatically after 48 hours; the app says 3–5 days. Everything is recorded. Caution: this still releases data without a person reading the letter unless an admin refuses in time — get legal advice before launch |
-| 10.46 | Help: common issues and the Olub Cha assistant | ✅ Complete | 14 Nov 2026, 09:00 | 27 topics covering passenger–driver problems. Olub Cha answers from Olub's policies and the asker's own records only, and refuses other people's details. It matches keywords; it is not an AI model. Issues can be raised to Olub and admins reply in the app |
+| 10.46 | Help: common issues and the Olub Chat assistant | ✅ Complete | 14 Nov 2026, 09:00 | 27 topics covering passenger–driver problems. Olub Chat answers from Olub's policies and the asker's own records only, and refuses other people's details. It matches keywords; it is not an AI model. Issues can be raised to Olub and admins reply in the app |
 | 10.47 | Admin home redesigned | ✅ Complete | 14 Nov 2026, 09:00 | One dashboard with today's numbers and a tile per job, with counts on the ones that need attention; each opens its own page with a back button |
+| 10.48 | Help assistant renamed Olub Chat | ✅ Complete | 15 Nov 2026, 14:23 |  |
+| 10.49 | Profile redesigned again | ✅ Complete | 15 Nov 2026, 14:23 | Round photo with gold ring, tap-to-copy Olub ID, floating stats card, coloured tiles |
+| 11.1 | Audit fix: unsafe picture uploads refused | ✅ Complete | 15 Nov 2026, 14:23 | A crafted "picture" could have carried code into another person's screen (for example an admin's). Only real JPG, PNG, WebP or GIF (and PDF for documents) are now accepted, and every picture address is escaped on screen |
+| 11.2 | Audit fix: old cancellation fee charged once | ✅ Complete | 15 Nov 2026, 14:23 | With two rides at the same time the fee was added to both. It now goes on one ride only |
+| 11.3 | Audit fix: sign-in limit no longer shared with Help | ✅ Complete | 15 Nov 2026, 14:23 | Help questions used the same counter as sign-in attempts, so a chatty user could lock out sign-in. Signed-in actions are now counted per person |
+| 11.4 | Audit fix: safety headers on every reply | ✅ Complete | 15 Nov 2026, 14:23 | Stops the app being framed by another site and browsers guessing file types. A full content security policy is still to do |
+| 11.5 | Audit fix: officer verification code limited to 5 tries | ✅ Complete | 15 Nov 2026, 14:23 | The request is closed after five wrong codes |
+| 11.6 | Audit fix: matched customers passed on, not refused | ✅ Complete | 15 Nov 2026, 14:23 | When a driver accepted one ride, other customers Olub had matched to that driver were told "declined". They now go to the next nearest cab |
+| 11.7 | Audit fix: customer's phone reports position only for their own ride | ✅ Complete | 15 Nov 2026, 14:23 | It no longer sends the booker's position into a ride booked for someone else |
+| 11.8 | Audit fix: Help issues included in "download my data" and deletion | ✅ Complete | 15 Nov 2026, 14:23 |  |
+| 11.9 | Audit fix: officials link opens the phone browser in the Android app | ✅ Complete | 15 Nov 2026, 14:23 | Not yet checked on a phone |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |

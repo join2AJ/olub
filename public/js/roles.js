@@ -236,13 +236,13 @@ function renderRiderTrip(app, t) {
     ${safetyRow(t)}
     ${t.canVerifyDriver ? `<div class="card soft"><h2>${ic('shield')} Verify your driver, get ${rs(S.cfg.verifyDiscount)} off</h2>
       <p class="muted">This driver is new on Olub. Please check in person:</p>
-      ${t.driver.photos.vehicle ? `<img src="${t.driver.photos.vehicle}" alt="Vehicle" style="width:100%;border-radius:14px">` : ''}
+      ${t.driver.photos.vehicle ? `<img src="${esc(t.driver.photos.vehicle)}" alt="Vehicle" style="width:100%;border-radius:14px">` : ''}
       <label class="check"><input type="checkbox" id="c1"><span>The driver's face matches the photo</span></label>
       <label class="check"><input type="checkbox" id="c2"><span>The number plate reads <b>${esc(t.driver.vehicleNumber)}</b></span></label>
       <label class="check"><input type="checkbox" id="c3"><span>The vehicle is a ${esc(t.driver.vehicleLabel)} ${esc(t.driver.vehicleModel || '')}</span></label>
       <button id="verify" class="btn block">Confirm and verify</button></div>` : ''}
     <div class="card farefold" data-fold="fare-${t.final ? 'bill' : 'est'}" ${t.final ? 'data-open' : ''} data-sum="${searching ? 'Estimate for the cab being asked · tap for details' : 'Tap to see every line'}"><h2><span>${t.final ? 'Your bill' : 'You pay'}</span><span class="amt">${rs(f.riderPays)}</span></h2>${fareTable(f, { final: !!t.final })}</div>
-    <div class="card"><div>${payBlock(t, false)}</div>
+    <div class="card paycard"><div>${payBlock(t, false)}</div>
       ${t.status === 'completed' ? `<div class="row" style="margin-top:10px"><button id="inv" class="btn ghost grow">${ic('file')}Invoice</button>${t.rated ? '' : `<button id="rate" class="btn ghost grow">${ic('star')}Rate driver</button>`}</div>` : ''}
       ${t.safety && t.safety.score != null ? `<p class="muted small" style="margin-top:8px">${ic('shield')} Driving safety score for this ride: <b>${t.safety.score}</b>/100</p>` : ''}
       ${t.paidAt ? '<button id="done" class="btn block">Done</button>' : ''}</div>
@@ -389,7 +389,7 @@ function renderDriverTrip(app, t) {
     ${t.status === 'completed' ? '' : tripMapHtml(t)}
     <div class="card">${steps(t.status)}
       <div class="between"><h2 style="margin:0">${{ accepted: 'Pick up your customer', started: 'Ride in progress', completed: t.paidAt ? 'Ride complete' : 'Collect payment' }[t.status]}</h2>${starsHtml(t.rider.rating)}</div>
-      <p style="margin:6px 0">${t.rider.photo ? `<img src="${t.rider.photo}" alt="" class="avatar" style="width:40px;height:40px;border-radius:12px;vertical-align:middle;margin-right:8px">` : ''}<b>${who}</b> · <span class="chip grey">${esc((t.guest || t.rider).publicId)}</span> ${t.pet ? `<span class="chip warn">${ic('paw')}Pet</span>` : ''}</p>
+      <p style="margin:6px 0">${t.rider.photo ? `<img src="${esc(t.rider.photo)}" alt="" class="avatar" style="width:40px;height:40px;border-radius:12px;vertical-align:middle;margin-right:8px">` : ''}<b>${who}</b> · <span class="chip grey">${esc((t.guest || t.rider).publicId)}</span> ${t.pet ? `<span class="chip warn">${ic('paw')}Pet</span>` : ''}</p>
       ${t.status === 'accepted' ? `
         <label class="f">Customer's 4-digit code</label><input id="otp" inputmode="numeric" maxlength="4" class="otp-in" placeholder="••••">
         <label class="check"><input type="checkbox" id="fit"><span><b>I am healthy, fit and fine to drive.</b> I have not had alcohol, tobacco or drugs, and I am not sleepy or unwell.</span></label>
@@ -557,7 +557,7 @@ const ADMIN = {
         <p class="small" style="margin:4px 0">${esc(r.details || '')} ${r.vehicleNumber ? `<span class="plate">${esc(r.vehicleNumber)}</span>` : ''} ${r.driverId ? esc(r.driverId) : ''} ${r.tripId ? `trip #${r.tripId}` : ''}</p>
         ${r.status === 'under_review' ? `<p class="small muted">Auto-answer on ${when(r.autoReleaseAt)} · promised by ${when(r.answerBy)}</p>
           <div class="row wrap"><button class="btn small ghost" data-proof="${r.id}">${ic('eye')}Letter</button><button class="btn small" data-rel="${r.id}">Release now</button><button class="btn small danger" data-ref="${r.id}">Refuse</button></div>` : `<p class="small muted">${esc(r.response || '')}</p>`}</div>`).join('') || '<p class="muted">No requests.</p>'}</div></div>`;
-    $$('[data-proof]').forEach((b) => { b.onclick = run(async () => { const p = await api('GET', `/api/admin/lea/${b.dataset.proof}/proof`); sheet('Authorisation letter', p.proof.startsWith('data:image') ? `<img src="${p.proof}" style="width:100%;border-radius:12px">` : `<a class="btn block" href="${p.proof}" target="_blank" rel="noopener">Open PDF</a>`); }); });
+    $$('[data-proof]').forEach((b) => { b.onclick = run(async () => { const p = await api('GET', `/api/admin/lea/${b.dataset.proof}/proof`); sheet('Authorisation letter', p.proof.startsWith('data:image') ? `<img src="${esc(p.proof)}" style="width:100%;border-radius:12px">` : `<a class="btn block" href="${p.proof}" target="_blank" rel="noopener">Open PDF</a>`); }); });
     $$('[data-rel]').forEach((b) => { b.onclick = run(async () => { await api('POST', `/api/admin/lea/${b.dataset.rel}/resolve`, { action: 'release' }); render(); }); });
     $$('[data-ref]').forEach((b) => { b.onclick = run(async () => { const why = prompt('Reason for refusing (sent to the officer):'); if (!why) return; await api('POST', `/api/admin/lea/${b.dataset.ref}/resolve`, { action: 'reject', response: why }); render(); }); });
     $$('[data-clear]').forEach((b) => { b.onclick = run(async () => { await api('POST', `/api/admin/flags/${b.dataset.clear}/clear`); render(); }); });
