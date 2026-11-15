@@ -203,15 +203,15 @@ This is the single list of everything asked for Olub, and where each point stand
 | 10.47 | Admin home redesigned | ✅ Complete | 14 Nov 2026, 09:00 | One dashboard with today's numbers and a tile per job, with counts on the ones that need attention; each opens its own page with a back button |
 | 10.48 | Help assistant renamed Olub Chat | ✅ Complete | 15 Nov 2026, 14:23 |  |
 | 10.49 | Profile redesigned again | ✅ Complete | 15 Nov 2026, 14:23 | Round photo with gold ring, tap-to-copy Olub ID, floating stats card, coloured tiles |
-| 11.1 | Audit fix: unsafe picture uploads refused | ✅ Complete | 15 Nov 2026, 14:23 | A crafted "picture" could have carried code into another person's screen (for example an admin's). Only real JPG, PNG, WebP or GIF (and PDF for documents) are now accepted, and every picture address is escaped on screen |
-| 11.2 | Audit fix: old cancellation fee charged once | ✅ Complete | 15 Nov 2026, 14:23 | With two rides at the same time the fee was added to both. It now goes on one ride only |
-| 11.3 | Audit fix: sign-in limit no longer shared with Help | ✅ Complete | 15 Nov 2026, 14:23 | Help questions used the same counter as sign-in attempts, so a chatty user could lock out sign-in. Signed-in actions are now counted per person |
-| 11.4 | Audit fix: safety headers on every reply | ✅ Complete | 15 Nov 2026, 14:23 | Stops the app being framed by another site and browsers guessing file types. A full content security policy is still to do |
-| 11.5 | Audit fix: officer verification code limited to 5 tries | ✅ Complete | 15 Nov 2026, 14:23 | The request is closed after five wrong codes |
-| 11.6 | Audit fix: matched customers passed on, not refused | ✅ Complete | 15 Nov 2026, 14:23 | When a driver accepted one ride, other customers Olub had matched to that driver were told "declined". They now go to the next nearest cab |
-| 11.7 | Audit fix: customer's phone reports position only for their own ride | ✅ Complete | 15 Nov 2026, 14:23 | It no longer sends the booker's position into a ride booked for someone else |
-| 11.8 | Audit fix: Help issues included in "download my data" and deletion | ✅ Complete | 15 Nov 2026, 14:23 |  |
-| 11.9 | Audit fix: officials link opens the phone browser in the Android app | ✅ Complete | 15 Nov 2026, 14:23 | Not yet checked on a phone |
+| 10.A1 | Audit fix: unsafe picture uploads refused | ✅ Complete | 15 Nov 2026, 14:23 | A crafted "picture" could have carried code into another person's screen (for example an admin's). Only real JPG, PNG, WebP or GIF (and PDF for documents) are now accepted, and every picture address is escaped on screen |
+| 10.A2 | Audit fix: old cancellation fee charged once | ✅ Complete | 15 Nov 2026, 14:23 | With two rides at the same time the fee was added to both. It now goes on one ride only |
+| 10.A3 | Audit fix: sign-in limit no longer shared with Help | ✅ Complete | 15 Nov 2026, 14:23 | Help questions used the same counter as sign-in attempts, so a chatty user could lock out sign-in. Signed-in actions are now counted per person |
+| 10.A4 | Audit fix: safety headers on every reply | ✅ Complete | 15 Nov 2026, 14:23 | Stops the app being framed by another site and browsers guessing file types. A full content security policy is still to do |
+| 10.A5 | Audit fix: officer verification code limited to 5 tries | ✅ Complete | 15 Nov 2026, 14:23 | The request is closed after five wrong codes |
+| 10.A6 | Audit fix: matched customers passed on, not refused | ✅ Complete | 15 Nov 2026, 14:23 | When a driver accepted one ride, other customers Olub had matched to that driver were told "declined". They now go to the next nearest cab |
+| 10.A7 | Audit fix: customer's phone reports position only for their own ride | ✅ Complete | 15 Nov 2026, 14:23 | It no longer sends the booker's position into a ride booked for someone else |
+| 10.A8 | Audit fix: Help issues included in "download my data" and deletion | ✅ Complete | 15 Nov 2026, 14:23 |  |
+| 10.A9 | Audit fix: officials link opens the phone browser in the Android app | ✅ Complete | 15 Nov 2026, 14:23 | Not yet checked on a phone |
 | 10.6 | Navigation heads reviewed | ✅ Complete | 12 Nov 2026, 16:04 | Customer: Ride, Activity, Safety, Ratings, Profile. Driver: Drive, Earnings, Trips, Ratings, Profile |
 | 10.7 | Better "My activity" dashboard | ✅ Complete | 12 Nov 2026, 16:04 | Spend card with chart, booking breakdown, filters, trip detail with bill and cancellation result |
 | 10.8 | Demo data for testing | ✅ Complete | 12 Nov 2026, 16:04 | 9 drivers (5 of them free and nearby), 4 customers, 15 trips in every state around Lucknow. Admin → Demo data, or `OLUB_DEMO=1` |
